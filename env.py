@@ -15,11 +15,27 @@ import gym
 WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
 IMAGEPATH = 'Race_Game/images/'
 
-class CarSprite(pygame.sprite.Sprite):
-    MAX_SPEED = 8
-    ACCELERATION = 1
-    TURN_ACCELERATION = 5
+### Reward Parameters
+MAX_REWARD = 10
+BUFFER_RATIO = 2 #buffered car = car size * BUFFER_RATIO
+BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
 
+### Car Parameters
+MAX_SPEED = 8
+ACCELERATION = 1
+TURN_ACCELERATION = 5
+
+# Function to scale the car rectangle by ratio for near miss calculation
+def scale_rect(rect, ratio):
+    new_width = rect.width * ratio
+    new_height = rect.height * ratio
+    new_rect = rect.copy()
+    new_rect.width = new_width
+    new_rect.height = new_height
+    new_rect.center = rect.center  # Keep the center the same
+    return new_rect
+
+class CarSprite(pygame.sprite.Sprite):
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
         self.src_image = pygame.image.load(image)
@@ -121,12 +137,6 @@ class RaceEnv(gym.Env):
 
 
     def calculate_reward(self):
-        
-        NEAR_MISS_RATIO = 1.2
-        L_R_BUFFER = 20
-        MAX_REWARD = 10
-        BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
-        
         # calculate the reward based on the current state
         # reward is 0 if no collision
         # reward is -MAX_REWARD if collision
@@ -151,21 +161,28 @@ class RaceEnv(gym.Env):
             self.car.MAX_SPEED = 0
 
         reward = 0
-        if self.win_condition is not None:
-            reward = [-MAX_REWARD, MAX_REWARD][int(self.win_condition)]
+        # buffer arounc car
+        buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
         # keep security buffer to screen (left/right), buffer penalty if too close, 0 if not
-        close_left = BUFFER_PENALTY if self.car.rect.left < L_R_BUFFER else 0
-        close_right = BUFFER_PENALTY if self.car.rect.right > WINDOW_WIDTH - L_R_BUFFER else 0
+        close_left = BUFFER_PENALTY if buffered_car.left < 0 else 0
+        close_right = BUFFER_PENALTY if buffered_car.right > WINDOW_WIDTH else 0
         # closeness to pads as buffer penalty or 0
-        close_miss_pad = [pygame.sprite.collide_rect_ratio(NEAR_MISS_RATIO)(self.car, pad) for pad in self.pads]
+        close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
         close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
         # distance to trophy
         distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
-        distance_trophy = distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY
-        # scale the sum to MAX_REWARD/2
-        sum = np.sum(close_left + close_right + close_miss_pad+ 1/distance_trophy)
-        #reward += MAX_REWARD/2 * (sum(close_miss_pad) + close_left + close_right + 1/distance_trophy)
+        distance_trophy = np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY)
+        # sum up all penalties
+        reward = round(close_left + close_right + close_miss_pad + distance_trophy,2)
+
+        # Overwrite if fail or success
+        if self.win_condition is not None:
+            reward = [-MAX_REWARD, MAX_REWARD][int(self.win_condition)]
+
+        all = [close_left, close_right, close_miss_pad, round(np.sum(distance_trophy))]
+        self.screenmessage = self.font.render(f"{reward}      l/r:{(close_left, close_right)}, pad:{close_miss_pad}, dist:{distance_trophy}", True, (255,0,0))
+        #self.screenmessage = self.font.render(str(round(reward,2)), True, (255,0,0))
         # return done
         return self.win_condition is not None, reward
 
@@ -225,6 +242,7 @@ while run:
     new_state, reward, done = environment.step(action)
     # render current state
     environment.render()
-    a = np.array(environment.car.rect.center) - np.array(environment.trophy.rect.center)
-    environment.screenmessage = environment.font.render(str(a), True, (255,0,0))
+    #environment.screenmessage = environment.font.render(str(a), True, (255,0,0))
 pygame.quit()
+
+environment.car.rect.right
