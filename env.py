@@ -18,7 +18,7 @@ IMAGEPATH = 'Race_Game/images/'
 class CarSprite(pygame.sprite.Sprite):
     MAX_SPEED = 8
     ACCELERATION = 1
-    TURN_ACCELERATION = 14
+    TURN_ACCELERATION = 5
 
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
@@ -76,9 +76,6 @@ class Trophy(pygame.sprite.Sprite):
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     def __init__(self,env_config={}):
-        # self.observation_space = <gym.space>
-        # self.action_space = <gym.space>
-
         # Initialize variables
         self.win_condition = None 
         self.t0 = time.time()
@@ -87,7 +84,7 @@ class RaceEnv(gym.Env):
         pads_list = [(0,10), (600,10), (1100,10), (100,150), (600,150), (100,300), (800,300), (400,450), (700,450), (200,600), (900,600), (400,750), (800,750)]
         self.pads = [PadSprite(pad) for pad in pads_list]
         # create trophy
-        self.trophy = Trophy((920, 720))
+        self.trophy = Trophy((285,0))
         # create car
         self.car = CarSprite(IMAGEPATH+'car.png', (10, 730))
         # render obstacles, car, trophy
@@ -98,6 +95,9 @@ class RaceEnv(gym.Env):
 
     def init_render(self):
         pygame.init()
+        # set up font
+        self.font = pygame.font.Font(None, 75)
+        self.screenmessage = self.font.render('', True, (255,0,0))
         # set up game window
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         # set fps timer
@@ -110,14 +110,15 @@ class RaceEnv(gym.Env):
         self.car_group.draw(self.screen)
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
-        # screen.blit(win_text, (250, 700))
-        # screen.blit(loss_text, (250, 700))
+        self.screen.blit(self.screenmessage, (250, 700))
         pygame.display.flip()
 
     def reset(self):
         # reset the environment to initial state
-        #return observation    
-        pass
+        #return observation
+        self.__init__()
+        self.screenmessage = self.font.render('', True, (255,0,0))
+
 
     def check_collision(self):
         self.collisions = pygame.sprite.groupcollide(self.car_group, self.pad_group, False, False, collided = None)
@@ -125,13 +126,18 @@ class RaceEnv(gym.Env):
             self.win_condition = False
             #timer_text = font.render("Crash!", True, (255,0,0))
             self.car.image = pygame.image.load(IMAGEPATH+'collision.png')
-            loss_text = win_font.render('Press Space to Retry', True, (255,0,0))
+            #loss_text = win_font.render('Press Space to Retry', True, (255,0,0))
             self.car.MAX_SPEED = 0
 
         trophy_collision = pygame.sprite.groupcollide(self.car_group, self.trophy_group, False, True)
         if trophy_collision != {}:
             self.win_condition = True
             #timer_text = font.render("Finished!", True, (0,255,0))
+            self.car.MAX_SPEED = 0
+        
+        # make sure car didnt leave the screen
+        if not self.screen.get_rect().colliderect(self.car.rect):
+            self.win_condition = False
             self.car.MAX_SPEED = 0
 
     def step(self, action):
@@ -140,6 +146,9 @@ class RaceEnv(gym.Env):
         observation, reward, done, info = self.car.update(action)
         # check collision
         self.check_collision()
+        # print win/loss message
+        if self.win_condition is not None:
+            self.screenmessage = self.font.render(['You fucked up', 'Finished!'][int(self.win_condition)], True, (0,255,0))
         return observation, reward, done, info   
     
 
@@ -147,26 +156,19 @@ class RaceEnv(gym.Env):
 def pressed_to_action(keytouple):
     action_turn = 0.
     action_acc = 0.
-    key = None
     if keytouple[pygame.K_DOWN] == 1:  # back
-        key = "back"
         action_acc -= 1
     if keytouple[pygame.K_UP] == 1:  # forward
-        key = "forward"
         action_acc += 1
     if keytouple[pygame.K_LEFT] == 1:  # left
-        key = "left"
         action_turn += 1
     if keytouple[pygame.K_RIGHT] == 1:  # right
-        key = "right"
         action_turn -= 1
     # ─── KEY IDS ─────────
     # arrow forward   : 273
     # arrow backwards : 274
     # arrow left      : 276
     # arrow right     : 275
-    print(f"KEY PRESSED: " + str(key))
-    print(action_acc, action_turn)
     return np.array([action_acc, action_turn])
 
 
@@ -178,23 +180,20 @@ while run:
     # set game speed to 30 fps
     environment.clock.tick(30)
     # ─── CONTROLS ───────────────────────────────────────────────────────────────────
-    # end while-loop when window is closed or escape key is pressed
     get_event = pygame.event.get()
-    for event in get_event:
-        if event.type == pygame.QUIT:
-            run = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            run = False  
     # get pressed keys, generate action
-    get_pressed = pygame.key.get_pressed()
-    action = pressed_to_action(get_pressed)
+    pressed_keys = pygame.key.get_pressed()
+    action = pressed_to_action(pressed_keys)
+    # end while-loop when window is closed or escape key is pressed
+    for event in get_event:
+        if event.type == pygame.QUIT or pressed_keys[pygame.K_ESCAPE]==1:
+            run = False
+        # reset the game when Failed or Won and space bar is pressed
+        if (environment.win_condition is not None) and pressed_keys[pygame.K_SPACE] == 1:
+            environment.reset()
+
     # calculate one step
-    environment.step(action)
+    observation, reward, done, info = environment.step(action)
     # render current state
     environment.render()
 pygame.quit()
-
-    # font = pygame.font.Font(None, 75)
-    # win_font = pygame.font.Font(None, 50)
-    # win_text = font.render('', True, (0, 255, 0))
-    # loss_text = font.render('', True, (255, 0, 0))
