@@ -47,8 +47,8 @@ class CarSprite(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = self.position
         # return obsrevations etc. for training
-        observation, reward, done, info = (self.position, self.direction) , 0., False, {}
-        return observation, reward, done, info
+        state = (self.position, self.direction, self.speed)
+        return state
 
 class PadSprite(pygame.sprite.Sprite):
     normal = pygame.image.load(IMAGEPATH+'race_pads.png')
@@ -120,7 +120,17 @@ class RaceEnv(gym.Env):
         self.screenmessage = self.font.render('', True, (255,0,0))
 
 
-    def check_collision(self):
+    def calculate_reward(self):
+        
+        NEAR_MISS_RATIO = 1.2
+        L_R_BUFFER = 20
+        MAX_REWARD = 10
+        BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
+        
+        # calculate the reward based on the current state
+        # reward is 0 if no collision
+        # reward is -MAX_REWARD if collision
+        # reward is MAX_REWARD if trophy is reached
         self.collisions = pygame.sprite.groupcollide(self.car_group, self.pad_group, False, False, collided = None)
         if self.collisions != {}:
             self.win_condition = False
@@ -140,16 +150,35 @@ class RaceEnv(gym.Env):
             self.win_condition = False
             self.car.MAX_SPEED = 0
 
+        reward = 0
+        if self.win_condition is not None:
+            reward = [-MAX_REWARD, MAX_REWARD][int(self.win_condition)]
+        # keep security buffer to screen (left/right), buffer penalty if too close, 0 if not
+        close_left = BUFFER_PENALTY if self.car.rect.left < L_R_BUFFER else 0
+        close_right = BUFFER_PENALTY if self.car.rect.right > WINDOW_WIDTH - L_R_BUFFER else 0
+        # closeness to pads as buffer penalty or 0
+        close_miss_pad = [pygame.sprite.collide_rect_ratio(NEAR_MISS_RATIO)(self.car, pad) for pad in self.pads]
+        close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
+        # distance to trophy
+        distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
+        # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
+        distance_trophy = distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY
+        # scale the sum to MAX_REWARD/2
+        sum = np.sum(close_left + close_right + close_miss_pad+ 1/distance_trophy)
+        #reward += MAX_REWARD/2 * (sum(close_miss_pad) + close_left + close_right + 1/distance_trophy)
+        # return done
+        return self.win_condition is not None, reward
+
     def step(self, action):
         # perform one step in the game logic
         # move car
-        observation, reward, done, info = self.car.update(action)
-        # check collision
-        self.check_collision()
+        state = self.car.update(action)
+        # check collision, calc reward
+        reward, done = self.calculate_reward()
         # print win/loss message
         if self.win_condition is not None:
             self.screenmessage = self.font.render(['You fucked up', 'Finished!'][int(self.win_condition)], True, (0,255,0))
-        return observation, reward, done, info   
+        return state, reward, done
     
 
 
@@ -193,7 +222,9 @@ while run:
             environment.reset()
 
     # calculate one step
-    observation, reward, done, info = environment.step(action)
+    new_state, reward, done = environment.step(action)
     # render current state
     environment.render()
+    a = np.array(environment.car.rect.center) - np.array(environment.trophy.rect.center)
+    environment.screenmessage = environment.font.render(str(a), True, (255,0,0))
 pygame.quit()
