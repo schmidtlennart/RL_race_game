@@ -3,27 +3,17 @@ import pygame, math, time
 import numpy as np
 from pygame.locals import *
 import gym
-#reset
-# game iteration
-# playstep
-# reward
 
 ### ToDO
 # remove car+trophy groups
-# 1. Implement the reset function
 
-WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
+WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
 IMAGEPATH = 'Race_Game/images/'
 
 ### Reward Parameters
 MAX_REWARD = 10
 BUFFER_RATIO = 2 #buffered car = car size * BUFFER_RATIO
 BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
-
-### Car Parameters
-MAX_SPEED = 8
-ACCELERATION = 1
-TURN_ACCELERATION = 5
 
 # Function to scale the car rectangle by ratio for near miss calculation
 def scale_rect(rect, ratio):
@@ -36,6 +26,11 @@ def scale_rect(rect, ratio):
     return new_rect
 
 class CarSprite(pygame.sprite.Sprite):
+    ### Car Parameters
+    MAX_SPEED = 8
+    ACCELERATION = 1
+    TURN_ACCELERATION = 5
+    
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
         self.src_image = pygame.image.load(image)
@@ -52,6 +47,7 @@ class CarSprite(pygame.sprite.Sprite):
             self.speed = self.MAX_SPEED if self.speed > 0 else -self.MAX_SPEED
         # add change of direction to current direction
         self.direction += action[1]*self.TURN_ACCELERATION
+        self.direction %= 360 #needs remapping to [0,359] because can take any value
         # calculate new position
         x, y = (self.position)
         rad = self.direction * math.pi / 180
@@ -92,38 +88,41 @@ class Trophy(pygame.sprite.Sprite):
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     def __init__(self,env_config={}):
+        # win/fail message in terminal
+        self.message_printed = False
+        # initialize pygame
+        pygame.init()
+        # set fps timer
+        self.clock = pygame.time.Clock()
         # Initialize variables
         self.win_condition = None 
-        self.t0 = time.time()
-
         # create obstacles
         pads_list = [(0,10), (600,10), (1100,10), (100,150), (600,150), (100,300), (800,300), (400,450), (700,450), (200,600), (900,600), (400,750), (800,750)]
         self.pads = [PadSprite(pad) for pad in pads_list]
+        self.pad_group = pygame.sprite.Group(*self.pads)
         # create trophy
         self.trophy = Trophy((285,0))
+        self.trophy_group = pygame.sprite.Group(self.trophy)
         # create car
         self.car = CarSprite(IMAGEPATH+'car.png', (10, 730))
-        # render obstacles, car, trophy
-        self.pad_group = pygame.sprite.RenderPlain(*self.pads)
-        self.car_group = pygame.sprite.RenderPlain(self.car)
-        self.trophy_group = pygame.sprite.RenderPlain(self.trophy)
-        
+        self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation       
 
-    def init_render(self):
-        pygame.init()
+    def init_render(self):      
+        # render obstacles, car, trophy 
+        self.pad_group = pygame.sprite.RenderPlain(self.pad_group)
+        self.car_group = pygame.sprite.RenderPlain(self.car_group)
+        self.trophy_group = pygame.sprite.RenderPlain(self.trophy_group)
         # set up font
         self.font = pygame.font.Font(None, 75)
         self.screenmessage = self.font.render('', True, (255,0,0))
         # set up game window
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        # set fps timer
-        self.clock = pygame.time.Clock()
 
 
     def render(self):
-        self.screen.fill((0,0,0))        
-        self.pad_group.update(self.collisions)
-        self.car_group.draw(self.screen)
+        self.screen.fill((0,0,0))# empty screen        
+        self.pad_group.update(self.collisions)#change pad image if hit
+        self.car_group.draw(self.screen)#draw car
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
         self.screen.blit(self.screenmessage, (250, 700))
@@ -152,7 +151,6 @@ class RaceEnv(gym.Env):
         trophy_collision = pygame.sprite.groupcollide(self.car_group, self.trophy_group, False, True)
         if trophy_collision != {}:
             self.win_condition = True
-            #timer_text = font.render("Finished!", True, (0,255,0))
             self.car.MAX_SPEED = 0
         
         # make sure car didnt leave the screen
@@ -179,10 +177,7 @@ class RaceEnv(gym.Env):
         # Overwrite if fail or success
         if self.win_condition is not None:
             reward = [-MAX_REWARD, MAX_REWARD][int(self.win_condition)]
-
-        all = [close_left, close_right, close_miss_pad, round(np.sum(distance_trophy))]
         self.screenmessage = self.font.render(f"{reward}      l/r:{(close_left, close_right)}, pad:{close_miss_pad}, dist:{distance_trophy}", True, (255,0,0))
-        #self.screenmessage = self.font.render(str(round(reward,2)), True, (255,0,0))
         # return done
         return self.win_condition is not None, reward
 
@@ -194,55 +189,32 @@ class RaceEnv(gym.Env):
         reward, done = self.calculate_reward()
         # print win/loss message
         if self.win_condition is not None:
-            self.screenmessage = self.font.render(['You fucked up', 'Finished!'][int(self.win_condition)], True, (0,255,0))
+            message = ['You fucked up', 'Finished!'][int(self.win_condition)]
+            self.screenmessage = self.font.render(message, True, (0,255,0))
+            while self.message_printed == False:
+                print(message)
+                self.message_printed = True
         return state, reward, done
     
-
-
-def pressed_to_action(keytouple):
-    action_turn = 0.
-    action_acc = 0.
-    if keytouple[pygame.K_DOWN] == 1:  # back
-        action_acc -= 1
-    if keytouple[pygame.K_UP] == 1:  # forward
-        action_acc += 1
-    if keytouple[pygame.K_LEFT] == 1:  # left
-        action_turn += 1
-    if keytouple[pygame.K_RIGHT] == 1:  # right
-        action_turn -= 1
-    # ─── KEY IDS ─────────
-    # arrow forward   : 273
-    # arrow backwards : 274
-    # arrow left      : 276
-    # arrow right     : 275
-    return np.array([action_acc, action_turn])
-
-
-environment = RaceEnv()
-environment.init_render()
-run = True
-
-while run:
-    # set game speed to 30 fps
-    environment.clock.tick(30)
-    # ─── CONTROLS ───────────────────────────────────────────────────────────────────
-    get_event = pygame.event.get()
-    # get pressed keys, generate action
-    pressed_keys = pygame.key.get_pressed()
-    action = pressed_to_action(pressed_keys)
-    # end while-loop when window is closed or escape key is pressed
-    for event in get_event:
-        if event.type == pygame.QUIT or pressed_keys[pygame.K_ESCAPE]==1:
-            run = False
-        # reset the game when Failed or Won and space bar is pressed
-        if (environment.win_condition is not None) and pressed_keys[pygame.K_SPACE] == 1:
-            environment.reset()
-
-    # calculate one step
-    new_state, reward, done = environment.step(action)
-    # render current state
-    environment.render()
-    #environment.screenmessage = environment.font.render(str(a), True, (255,0,0))
-pygame.quit()
-
-environment.car.rect.right
+    def pressed_to_action(self):
+        # translate keyboard keys to exit/restart or game action    
+        get_event = pygame.event.get()
+        keytouple = pygame.key.get_pressed()
+        # end game when window is closed or escape key is pressed
+        for event in get_event:
+            if event.type == pygame.QUIT or keytouple[pygame.K_ESCAPE]==1:
+                pygame.quit()
+            # reset the game when Failed or Won and space bar is pressed
+            if (self.win_condition is not None) and keytouple[pygame.K_SPACE] == 1:
+                self.reset()
+        action_turn = 0.
+        action_acc = 0.
+        if keytouple[pygame.K_UP] == 1:  # forward
+            action_acc += 1
+        if keytouple[pygame.K_DOWN] == 1:  # back
+            action_acc -= 1
+        if keytouple[pygame.K_LEFT] == 1:  # left
+            action_turn += 1
+        if keytouple[pygame.K_RIGHT] == 1:  # right
+            action_turn -= 1
+        return np.array([action_acc, action_turn])
