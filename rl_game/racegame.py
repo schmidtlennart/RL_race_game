@@ -12,8 +12,15 @@ IMAGEPATH = 'Race_Game/images/'
 
 ### Reward Parameters
 MAX_REWARD = 10
+MAX_PENALTY = -20
 BUFFER_RATIO = 2 #buffered car = car size * BUFFER_RATIO
 BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
+
+# Car Parameters
+MAX_SPEED = 8
+ACCELERATION = 1
+TURN_ACCELERATION = 5
+    
 
 # Function to scale the car rectangle by ratio for near miss calculation
 def scale_rect(rect, ratio):
@@ -26,27 +33,24 @@ def scale_rect(rect, ratio):
     return new_rect
 
 class CarSprite(pygame.sprite.Sprite):
-    ### Car Parameters
-    MAX_SPEED = 8
-    ACCELERATION = 1
-    TURN_ACCELERATION = 5
     
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
         self.src_image = pygame.image.load(image)
         self.position = position
-        self.speed = self.direction = 0
-        self.k_left = self.k_right = self.k_down = self.k_up = 0
-    
+        self.speed = 0
+        self.direction = 320
+        self.MAX_SPEED = MAX_SPEED
+
     def update(self, action):
         #SIMULATION
-        # action[0]: acceleration | action[1]: rotation
+        # action[0]: acceleration -1:back, 1:forwards | action[1]: rotation, 1:left, -1:right
         # add acceleration to current speed
-        self.speed += action[0]*self.ACCELERATION
+        self.speed += action[0]*ACCELERATION
         if abs(self.speed) > self.MAX_SPEED:
             self.speed = self.MAX_SPEED if self.speed > 0 else -self.MAX_SPEED
         # add change of direction to current direction
-        self.direction += action[1]*self.TURN_ACCELERATION
+        self.direction += action[1]*TURN_ACCELERATION
         self.direction %= 360 #needs remapping to [0,359] because can take any value
         # calculate new position
         x, y = (self.position)
@@ -59,7 +63,7 @@ class CarSprite(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = self.position
         # return obsrevations etc. for training
-        state = (self.position, self.direction, self.speed)
+        state = (self.position[0], self.position[1], self.direction, self.speed)
         return state
 
 class PadSprite(pygame.sprite.Sprite):
@@ -102,7 +106,7 @@ class RaceEnv(gym.Env):
         self.pad_group = pygame.sprite.Group(*self.pads)
         # create trophy
         self.trophy = Trophy((285,0))
-        self.trophy_group = pygame.sprite.Group(self.trophy)
+        self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
         self.car = CarSprite(IMAGEPATH+'car.png', (10, 730))
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation       
@@ -113,7 +117,7 @@ class RaceEnv(gym.Env):
         self.car_group = pygame.sprite.RenderPlain(self.car_group)
         self.trophy_group = pygame.sprite.RenderPlain(self.trophy_group)
         # set up font
-        self.font = pygame.font.Font(None, 75)
+        self.font = pygame.font.Font(None, 40)
         self.screenmessage = self.font.render('', True, (255,0,0))
         # set up game window
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -125,14 +129,17 @@ class RaceEnv(gym.Env):
         self.car_group.draw(self.screen)#draw car
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
-        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (250, 700))
+        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (150, 700))
         pygame.display.flip()
 
     def reset(self):
         # reset the environment to initial state
         #return observation
         self.__init__()
-        self.screenmessage = self.font.render('', True, (255,0,0))
+        self.screenmessage = ''
+        # give out current state
+        state = (self.car.position[0], self.car.position[1], self.car.direction, self.car.speed)
+        return state
 
 
     def calculate_reward(self):
@@ -166,23 +173,26 @@ class RaceEnv(gym.Env):
         self.reward = 0
         # buffer arounc car
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
-        # keep security buffer to screen (left/right), buffer penalty if too close, 0 if not
+        # if too close to to screen (left/right), buffer penalty if too close, 0 if not
         close_left = BUFFER_PENALTY if buffered_car.left < 0 else 0
         close_right = BUFFER_PENALTY if buffered_car.right > WINDOW_WIDTH else 0
-        # closeness to pads as buffer penalty or 0
+        # if too close to pads as buffer penalty or 0
         close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
         close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
+        # distance to nearby pads
+        distance_pads = round(min([np.linalg.norm(np.array(self.car.rect.center) - np.array(pad.rect.center)) for pad in self.pads])/100,1)
         # distance to trophy
         distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
-        distance_trophy = round(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY),1)
+        distance_trophy = distance_trophy * (0.2,0.8) #weighting x less than y
+        distance_trophy = round(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY)**2,1)
         # sum up all penalties
-        self.reward = round(close_left + close_right + close_miss_pad + distance_trophy,1)
+        self.reward = round(close_left + close_right + close_miss_pad + distance_trophy + distance_pads,1)
 
         # Overwrite if fail or success
         if self.win_condition is not None:
-            self.reward = [-MAX_REWARD, MAX_REWARD][int(self.win_condition)]
-        self.screenmessage = f"{self.reward} (l/r:{(close_left, close_right)}, pad:{close_miss_pad}, dist:{distance_trophy})"
+            self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
+        self.screenmessage = f"{self.reward} (l/r:{(close_left, close_right)}, pad:{close_miss_pad}, dist:{distance_trophy}, pads:{distance_pads})"
         # return done
         return self.win_condition is not None
 
@@ -210,7 +220,7 @@ class RaceEnv(gym.Env):
                 pygame.quit()
             # reset the game when Failed or Won and space bar is pressed
             if (self.win_condition is not None) and keytouple[pygame.K_SPACE] == 1:
-                self.reset()
+                _ = self.reset()
         action_turn = 0.
         action_acc = 0.
         if keytouple[pygame.K_UP] == 1:  # forward

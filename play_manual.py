@@ -1,4 +1,4 @@
-from game.racegame import RaceEnv
+from rl_game.racegame import RaceEnv
 
 environment = RaceEnv()
 environment.init_render()

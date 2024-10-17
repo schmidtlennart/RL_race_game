@@ -1,100 +1,86 @@
 ### QLearning
 import numpy as np
-import random
-from env import RaceEnv
+import pygame
+from rl_game.racegame import RaceEnv, MAX_SPEED, WINDOW_WIDTH, WINDOW_HEIGHT
+from rl_game.helpers import get_discrete_state
 
-MAX_SPEED = 8
-WINDOW_SIZE = 1020, 770
+LEARNING_RATE = 0.1
+DISCOUNT = 0.95
+EPISODES = 1000
 
-def create_bins(min_value, max_value, n_bins):
-    bins = []
-    bin_size = (max_value - min_value + 1) / n_bins
-    current_value = min_value
-    for i in range(n_bins):
-        next_value = min(current_value + bin_size - 1, max_value)
-        bins.append((int(current_value), int(next_value)))
-        current_value += bin_size
-    return bins
+# Exploration settings
+epsilon = 1  # not a constant, qoing to be decayed
+START_EPSILON_DECAYING = 1
+END_EPSILON_DECAYING = EPISODES//2
+epsilon_decay_value = epsilon/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 
-# get min and max values for observations
-direction_bins = create_bins(0, 359, 4)
-speed_bins = create_bins(-MAX_SPEED, MAX_SPEED, 4)
-position_x_bins = create_bins(0, WINDOW_SIZE[0], 10)
-position_y_bins = create_bins(0, WINDOW_SIZE[1], 10)
-
+# create bins for the Q-table
+position_x_bins = np.linspace(-20, WINDOW_WIDTH+20, 41) #needs a bit extra space, position can be negative/slightly outside of window
+position_y_bins = np.linspace(-20, WINDOW_HEIGHT+20, 41)
+direction_bins = np.linspace(0, 359, 37)# 5 = 4 bins
+speed_bins = np.linspace(-MAX_SPEED-0.2, MAX_SPEED+0.2, 9) # extra to catch boundaries
+all_bins = [position_x_bins, position_y_bins,direction_bins, speed_bins]
 # action space
-actions = [0,1, 2, 3, 4]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward, 3: left, 4: right
+actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward, 3: left, 4: right
+# initialize Q-table
+q_table = np.random.uniform(low=-2, high=0, size= [len(position_x_bins)-1, len(position_y_bins)-1,len(direction_bins)-1, len(speed_bins)-1, len(actions)])
 
+### QLEARNING LOOP
 
-obs_space = 20
-action_space = 4
-q_table = np.zeros((obs_space, obs_space, action_space))
-
-
-
-
+# initialize environment
 environment = RaceEnv()
 environment.init_render()
-run = True
+SHOW_EVERY = 50
+render = False
 
-while run:
-    # set game speed to 30 fps
-    environment.clock.tick(30)
-    # ─── CONTROLS ───────────────────────────────────────────────────────────────────
-    # get pressed keys, generate action
-    action = environment.pressed_to_action()
-    # calculate one step
-    new_state, reward, done = environment.step(action)
-    # render current state
-    environment.render()
+for episode in range(EPISODES):
+    if episode % SHOW_EVERY == 0:
+        print(f"Episode: {episode}")
+        render = True
+    done = False
+    # get initial state
+    discrete_state = get_discrete_state(environment.reset(), all_bins)
+
+    while not done:
+        # set game speed to 30 fps
+        #environment.clock.tick(30)
+
+        # Get action: exploit or explore
+        if np.random.random() > epsilon:
+            # Exploit: Get action from Q table
+            action = np.argmax(q_table[discrete_state])
+        else:
+            # Explore: Get random action
+            action = np.random.randint(0, len(actions))
+        # perform
+        new_state, reward, done = environment.step(actions[action])
+        new_discrete_state = get_discrete_state(new_state, all_bins)
+        print(f"New state: {new_state}")
+        print(f"New state discrete: {new_discrete_state}")
+        # render current state
+        if render:
+            environment.render()
+
+        ### UPDATE Q TABLE
+        #new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
+        # Inuition: Update current Q value with the maximum Q value that could be reached after the action
+        # Maximum possible Q value in next step (for new state)
+        max_future_q = np.max(q_table[new_discrete_state])
+
+        # Current Q value (for current state and performed action)
+        current_q = q_table[discrete_state + (action,)]
+
+        # And here's our equation for a new Q value for current state and action
+        new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
+
+        # Update Q table with new Q value
+        q_table[discrete_state + (action,)] = new_q
+        
+        # Update current state for new loop
+        discrete_state = new_discrete_state
+
+    # Decaying is being done every episode if episode number is within decaying range
+    if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
+        epsilon -= epsilon_decay_value
+
 pygame.quit()
-
-
-# class QLearning:
-#     def __init__(self, actions, epsilon, alpha, gamma):
-#         self.q = {}
-#         self.epsilon = epsilon
-#         self.alpha = alpha
-#         self.gamma = gamma
-#         self.actions = actions
-
-#     def getQ(self, state, action):
-#         return self.q.get((state, action), 0.0)
-
-#     def chooseAction(self, state):
-#         if random.random() < self.epsilon:
-#             action = random.choice(self.actions)
-#         else:
-#             q = [self.getQ(state, a) for a in self.actions]
-#             maxQ = max(q)
-#             count = q.count(maxQ)
-#             if count > 1:
-#                 best = [i for i in range(len(self.actions)) if q[i] == maxQ]
-#                 i = random.choice(best)
-#             else:
-#                 i = q.index(maxQ)
-#             action = self.actions[i]
-#         return action
-
-#     def learn(self, state, action, reward, value):
-#         oldv = self.q.get((state, action), None)
-#         if oldv is None:
-#             self.q[(state, action)] = reward
-#         else:
-#             self.q[(state, action)] = oldv + self.alpha * (value - oldv)
-
-#     def update(self, state, action, reward, new_state):
-#         q = [self.getQ(new_state, a) for a in self.actions]
-#         futureReward = max(q)
-#         self.learn(state, action, reward, reward + self.gamma * futureReward)
-
-#     def save(self, filename):
-#         with open(filename, 'w') as f:
-#             for k, v in self.q.items():
-#                 f.write(str(k[0][0]) + ',' + str(k[0][1]) + ',' + str(k[1]) + ',' + str(v) + '\n')
-
-#     def load(self, filename):
-#         with open(filename, 'r') as f:
-#             for line in f:
-#                 parts = line.split(',')
-#                 self.q[(int(parts[0]), int(parts[1]), int(parts[2]))] = float(parts[3])
