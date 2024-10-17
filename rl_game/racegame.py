@@ -160,22 +160,26 @@ class RaceEnv(gym.Env):
             self.win_condition = True
             self.car.MAX_SPEED = 0
         
-        # if not self.screen.get_rect().colliderect(self.car.rect):
-        #     self.win_condition = False
-        #     self.car.MAX_SPEED = 0
         # make sure center of car didnt leave the screen
         x_condition = self.car.rect.center[0] < 0 or self.car.rect.center[0] > WINDOW_WIDTH
         y_condition = self.car.rect.center[1] < 0 or self.car.rect.center[1] > WINDOW_HEIGHT
         if x_condition or y_condition:
             self.win_condition = False
             self.car.MAX_SPEED = 0
+        
+        self.reward_func()
 
+        # return done
+        return self.win_condition is not None
+
+    def reward_func(self):
         self.reward = 0
-        # buffer arounc car
+        # buffer around car
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
-        # if too close to to screen (left/right), buffer penalty if too close, 0 if not
+        # if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
         close_left = BUFFER_PENALTY if buffered_car.left < 0 else 0
         close_right = BUFFER_PENALTY if buffered_car.right > WINDOW_WIDTH else 0
+        close_bottom = BUFFER_PENALTY if buffered_car.bottom > WINDOW_HEIGHT else 0
         # if too close to pads as buffer penalty or 0
         close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
         close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
@@ -185,16 +189,27 @@ class RaceEnv(gym.Env):
         distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
         distance_trophy = distance_trophy * (0.2,0.8) #weighting x less than y
-        distance_trophy = round(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]) * BUFFER_PENALTY)**2,1)
+        distance_trophy = round(1/(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))),1)
         # sum up all penalties
-        self.reward = round(close_left + close_right + close_miss_pad + distance_trophy + distance_pads,1)
+        self.reward = round(close_left + close_right + close_bottom + close_miss_pad + distance_trophy + distance_pads,1)
 
         # Overwrite if fail or success
         if self.win_condition is not None:
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
-        self.screenmessage = f"{self.reward} (l/r:{(close_left, close_right)}, pad:{close_miss_pad}, dist:{distance_trophy}, pads:{distance_pads})"
-        # return done
-        return self.win_condition is not None
+        self.screenmessage = f"{self.reward} (l/r/b:{(close_left, close_right, close_bottom)}, pad:{close_miss_pad}, dist:{distance_trophy}, pads:{distance_pads})"
+
+
+    def plot_reward_map(self):
+        reward_map = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT))
+        # plot the reward map
+        for x in range(0, WINDOW_WIDTH):
+            for y in range(0, WINDOW_HEIGHT):
+                print(x)
+                self.car.rect.center = (x,y)
+                self.reward_func()
+                reward_map[x,y] = self.reward
+        # save to png
+        return(reward_map)
 
     def step(self, action):
         # perform one step in the game logic
@@ -206,7 +221,7 @@ class RaceEnv(gym.Env):
         if self.win_condition is not None:
             self.screenmessage = ['You fucked up', 'Finished!'][int(self.win_condition)]
             while self.message_printed == False:
-                print(self.screenmessage)
+                #print(self.screenmessage)
                 self.message_printed = True
         return state, self.reward, done
     

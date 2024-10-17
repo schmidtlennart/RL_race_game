@@ -55,8 +55,8 @@ for episode in range(EPISODES):
         # perform
         new_state, reward, done = environment.step(actions[action])
         new_discrete_state = get_discrete_state(new_state, all_bins)
-        print(f"New state: {new_state}")
-        print(f"New state discrete: {new_discrete_state}")
+        #print(f"New state: {new_state}")
+        #print(f"New state discrete: {new_discrete_state}")
         # render current state
         if render:
             environment.render()
@@ -82,5 +82,5 @@ for episode in range(EPISODES):
     # Decaying is being done every episode if episode number is within decaying range
     if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
         epsilon -= epsilon_decay_value
-
+    render = False
 pygame.quit()
