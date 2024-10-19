@@ -8,10 +8,11 @@ environment = RaceEnv()
 
 environment.init_render()
 action = environment.pressed_to_action()
-# calculate one step
+# initial step
 new_state, reward, done = environment.step(action)
 initial_car_position = environment.car.position
 map = environment.plot_reward_map()
+pygame.quit()
 # to float32
 map = np.array(map, dtype=np.float32)
 map = map.T
@@ -29,14 +30,15 @@ plt.xlim(0, WINDOW_WIDTH)
 plt.ylim(WINDOW_HEIGHT,0)
 # save to png
 plt.savefig('images/reward_map_2.png', dpi=300)
-# save to numpy
-np.save('results/reward_map_2.npy', map)
 plt.close()
 
-pygame.quit()
+# save to numpy
+np.save('results/reward_map_2.npy', map)
+
+
 
 map = np.load('results/reward_map_2.npy')
-min_index = np.argmin(m)
+# min_index = np.argmin(m)
 
-# Convert the flattened index to coordinates in the 2D array
-min_coords = np.unravel_index(min_index, m.shape)
+# # Convert the flattened index to coordinates in the 2D array
+# min_coords = np.unravel_index(min_index, m.shape)

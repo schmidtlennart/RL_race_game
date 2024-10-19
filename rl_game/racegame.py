@@ -18,7 +18,7 @@ BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
 
 # Car Parameters
 MAX_SPEED = 8
-ACCELERATION = 1
+ACCELERATION = 0.5
 TURN_ACCELERATION = 5
     
 
@@ -183,8 +183,8 @@ class RaceEnv(gym.Env):
         # if too close to pads as buffer penalty or 0
         close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
         close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
-        # distance to nearby pads
-        distance_pads = round(min([np.linalg.norm(np.array(self.car.rect.center) - np.array(pad.rect.center)) for pad in self.pads])/100,1)
+        # distance to outside of closesz pad
+        distance_pads = round(self.calculate_distance_to_pads(),1)
         # distance to trophy
         distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
@@ -198,7 +198,23 @@ class RaceEnv(gym.Env):
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
         self.screenmessage = f"{self.reward} (l/r/b:{(close_left, close_right, close_bottom)}, pad:{close_miss_pad}, dist:{distance_trophy}, pads:{distance_pads})"
 
-
+    def calculate_distance_to_pads(self):
+        car_center = np.array(self.car.rect.center)
+        distances = []
+        for pad in self.pads:
+            pad_rect = pad.rect
+            pad_distances = [
+                #np.linalg.norm(car_center - np.array([pad_rect.left, car_center[0]])),  # Distance to left edge
+                #np.linalg.norm(car_center - np.array([pad_rect.right, car_center[0]])),  # Distance to right edge
+                #np.linalg.norm(car_center - np.array([car_center[0], pad_rect.top])),  # Distance to top edge
+                #np.linalg.norm(car_center - np.array([car_center[0], pad_rect.bottom]))  # Distance to bottom edge
+                car_center[1]- pad_rect.top,
+                car_center[1]- pad_rect.bottom
+            ]
+            distances.append(min(pad_distances))
+            min_distance = min(distances)/100
+        return min_distance
+    
     def plot_reward_map(self):
         reward_map = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT))
         # plot the reward map
@@ -206,9 +222,10 @@ class RaceEnv(gym.Env):
             for y in range(0, WINDOW_HEIGHT):
                 print(x)
                 self.car.rect.center = (x,y)
-                self.reward_func()
-                reward_map[x,y] = self.reward
-        # save to png
+                # skip if center inside any of the pad
+                if not any([pad.rect.collidepoint(self.car.rect.center) for pad in self.pads]):                
+                    self.reward_func()
+                    reward_map[x,y] = self.reward
         return(reward_map)
 
     def step(self, action):
