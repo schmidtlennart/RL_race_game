@@ -11,7 +11,8 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
 IMAGEPATH = 'Race_Game/images/'
 
 ### Reward Parameters
-MAX_REWARD = 10
+MAX_REWARD = 20
+CHECKPOINT_REWARD = MAX_REWARD/8
 MAX_PENALTY = -20
 BUFFER_RATIO = 2 #buffered car = car size * BUFFER_RATIO
 BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
@@ -67,6 +68,7 @@ class CarSprite(pygame.sprite.Sprite):
         return state
 
 class PadSprite(pygame.sprite.Sprite):
+    # Dimensions: PadSprite((100,100))#x: -150,350, y: 113, 88 = +/-250 in x, +/- 13 in y = size 500, 25
     normal = pygame.image.load(IMAGEPATH+'race_pads.png')
     hit = pygame.image.load(IMAGEPATH+'collision.png')
     def __init__(self, position):
@@ -80,6 +82,16 @@ class PadSprite(pygame.sprite.Sprite):
         else:
             self.image = self.normal
 
+class CheckpointSprite(pygame.sprite.Sprite):
+    def __init__(self, position, width=150, height=25):
+        super(CheckpointSprite, self).__init__()
+        #self.rect = pygame.Rect(0, 0, width, height)
+        #self.rect.center = position
+        self.image = pygame.Surface((width, height))
+        self.image.fill((255, 0, 0))  # Fill the pad with a color (red in this case)
+        self.rect = self.image.get_rect()
+        self.rect.center = position
+
 class Trophy(pygame.sprite.Sprite):
     def __init__(self, position):
         pygame.sprite.Sprite.__init__(self)
@@ -91,6 +103,7 @@ class Trophy(pygame.sprite.Sprite):
 
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
+    # Screen definition (x,y): Top left: (0,0), Bottom right: (1024,768)
     def __init__(self,env_config={}):
         # win/fail message in terminal
         self.message_printed = False
@@ -101,9 +114,15 @@ class RaceEnv(gym.Env):
         # Initialize variables
         self.win_condition = None 
         # create obstacles
-        pads_list = [(0,10), (600,10), (1100,10), (100,150), (600,150), (100,300), (800,300), (400,450), (700,450), (200,600), (900,600), (400,750), (800,750)]
+        pads_list = [(0,10), (600,10), (1100,10), (100,150), (600,150), (100,300), (800,300), (400,450), (900,450), (200,600), (900,600), (400,750), (800,750)]
         self.pads = [PadSprite(pad) for pad in pads_list]
         self.pad_group = pygame.sprite.Group(*self.pads)
+        # define y-checkpoints (if it passes through y of obstacles)
+        checkpoints_list = [(550,600),(50,450), (450,300), (950,150)]
+        self.checkpoints = [CheckpointSprite(checkpoint) for checkpoint in checkpoints_list]
+        self.checkpoint_group = pygame.sprite.Group(self.checkpoints)
+        self.checkpoint_counter = 0
+        self.checkpoint_reward = 0
         # create trophy
         self.trophy = Trophy((285,0))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
@@ -116,6 +135,7 @@ class RaceEnv(gym.Env):
         self.pad_group = pygame.sprite.RenderPlain(self.pad_group)
         self.car_group = pygame.sprite.RenderPlain(self.car_group)
         self.trophy_group = pygame.sprite.RenderPlain(self.trophy_group)
+        self.checkpoint_group = pygame.sprite.RenderPlain(self.checkpoint_group)
         # set up font
         self.font = pygame.font.Font(None, 40)
         self.screenmessage = self.font.render('', True, (255,0,0))
@@ -129,6 +149,7 @@ class RaceEnv(gym.Env):
         self.car_group.draw(self.screen)#draw car
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
+        self.checkpoint_group.draw(self.screen)
         self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (150, 700))
         pygame.display.flip()
 
@@ -166,37 +187,55 @@ class RaceEnv(gym.Env):
         if x_condition or y_condition:
             self.win_condition = False
             self.car.MAX_SPEED = 0
-        
+        # calculate dynamic reward
         self.reward_func()
 
         # return done
         return self.win_condition is not None
 
     def reward_func(self):
-        self.reward = 0
+        reward = [0]
         # buffer around car
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
-        # if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
-        close_left = BUFFER_PENALTY if buffered_car.left < 0 else 0
-        close_right = BUFFER_PENALTY if buffered_car.right > WINDOW_WIDTH else 0
-        close_bottom = BUFFER_PENALTY if buffered_car.bottom > WINDOW_HEIGHT else 0
+        ### if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
+        if (buffered_car.left < 0) or (buffered_car.right > WINDOW_WIDTH) or (buffered_car.bottom > WINDOW_HEIGHT): 
+            reward.append(BUFFER_PENALTY*2)
         # if too close to pads as buffer penalty or 0
         close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
-        close_miss_pad = BUFFER_PENALTY if np.any(close_miss_pad) else 0
-        # distance to outside of closesz pad
-        distance_pads = round(self.calculate_distance_to_pads(),1)
-        # distance to trophy
-        distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
-        # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
-        distance_trophy = distance_trophy * (0.2,0.8) #weighting x less than y
-        distance_trophy = round(1/(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))),1)
-        # sum up all penalties
-        self.reward = round(close_left + close_right + close_bottom + close_miss_pad + distance_trophy + distance_pads,1)
+        if np.any(close_miss_pad): reward.append(BUFFER_PENALTY)
+
+        # ##distance to outside of closest pad (doenst work)
+        #distance_pads = round(self.calculate_distance_to_pads(),1)
+        
+        # ### distance to trophy
+        # distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
+        # # normalize by screen width, height, i.e. between 0 and 1 * BUFFER_PENALTY
+        # distance_trophy = distance_trophy * (0.2,0.8) #weighting x less than y
+        # distance_trophy = round(1/(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))),1)
+        # #reward.append(distance_trophy)
+
+        ### if checkpoint n is reached, add constant to reward from there on
+        if self.checkpoints[self.checkpoint_counter].rect.collidepoint(self.car.rect.center):
+            self.checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
+            if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
+                # checkpoints 1+2 are on same y, so add if one of them is reached
+                    self.checkpoint_counter += 1
+        reward.append(self.checkpoint_reward)
+
+        ### euclidian distance to next checkpoint
+        distance_checkpoint = np.array(self.car.rect.center) - np.array(self.checkpoints[self.checkpoint_counter].rect.center)
+        # normalize by screen width, height, i.e. between 0 and 1 
+        distance_checkpoint_print = (np.abs(distance_checkpoint) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))
+        # subtract from 1
+        distance_checkpoint = 1-np.sum(distance_checkpoint_print)
+        reward.append(distance_checkpoint)
+        ### sum up all penalties
+        self.reward = round(sum(reward),1)# + distance_trophy,1)# + distance_pads,1)
 
         # Overwrite if fail or success
         if self.win_condition is not None:
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
-        self.screenmessage = f"{self.reward} (l/r/b:{(close_left, close_right, close_bottom)}, pad:{close_miss_pad}, dist:{distance_trophy}, pads:{distance_pads})"
+        self.screenmessage = f"{self.reward}, {distance_checkpoint_print}"
 
     def calculate_distance_to_pads(self):
         car_center = np.array(self.car.rect.center)

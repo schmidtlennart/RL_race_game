@@ -6,7 +6,8 @@ from rl_game.helpers import get_discrete_state
 
 LEARNING_RATE = 0.1
 DISCOUNT = 0.95
-EPISODES = 1000
+EPISODES = 10000
+SHOW_EVERY = 50
 
 # Exploration settings
 epsilon = 1  # not a constant, qoing to be decayed
@@ -30,7 +31,6 @@ q_table = np.random.uniform(low=-2, high=0, size= [len(position_x_bins)-1, len(p
 # initialize environment
 environment = RaceEnv()
 environment.init_render()
-SHOW_EVERY = 50
 render = False
 
 for episode in range(EPISODES):

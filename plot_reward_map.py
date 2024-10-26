@@ -11,6 +11,9 @@ action = environment.pressed_to_action()
 # initial step
 new_state, reward, done = environment.step(action)
 initial_car_position = environment.car.position
+
+d = environment.calculate_distance_to_pads()
+
 map = environment.plot_reward_map()
 pygame.quit()
 # to float32
