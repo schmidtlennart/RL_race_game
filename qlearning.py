@@ -16,15 +16,24 @@ END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = epsilon/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 
 # create bins for the Q-table
-position_x_bins = np.linspace(-20, WINDOW_WIDTH+20, 41) #needs a bit extra space, position can be negative/slightly outside of window
-position_y_bins = np.linspace(-20, WINDOW_HEIGHT+20, 41)
-direction_bins = np.linspace(0, 359, 37)# 5 = 4 bins
+# position_x_bins = np.linspace(-20, WINDOW_WIDTH+20, 41) #needs a bit extra space, position can be negative/slightly outside of window
+# position_y_bins = np.linspace(-20, WINDOW_HEIGHT+20, 41)
+
+# position is now distances in 4 dimensions
+distance_l = np.linspace(0, 300, 20)
+distance_r = np.linspace(0, 300, 20)
+distance_t = np.linspace(0, 300, 20)
+distance_b = np.linspace(0, 300, 20)
+
+direction_bins = np.linspace(0, 359, 36)
 speed_bins = np.linspace(-MAX_SPEED-0.2, MAX_SPEED+0.2, 9) # extra to catch boundaries
-all_bins = [position_x_bins, position_y_bins,direction_bins, speed_bins]
+all_bins = [distance_l,distance_r, distance_t, distance_b, direction_bins, speed_bins]
 # action space
 actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward, 3: left, 4: right
 # initialize Q-table
-q_table = np.random.uniform(low=-2, high=0, size= [len(position_x_bins)-1, len(position_y_bins)-1,len(direction_bins)-1, len(speed_bins)-1, len(actions)])
+q_table = np.random.uniform(low=-1, high=0, size= [len(distance_l)-1, len(distance_r)-1, len(distance_t)-1, len(distance_b)-1, len(direction_bins)-1, len(speed_bins)-1, len(actions)])
+
+q_table.size
 
 ### QLEARNING LOOP
 

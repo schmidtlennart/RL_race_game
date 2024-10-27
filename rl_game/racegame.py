@@ -1,11 +1,14 @@
-#initialize the screen
+### ToDO
+# add distance/direction to checkpoint into state
+# clean distance to obstacles
+# more buffers as distance to buffer in rewar --> smoother rewardmap
+# check initilalization vs reward changes
+# record Qvalues/path/final location
+
 import pygame, math, time
 import numpy as np
 from pygame.locals import *
 import gym
-
-### ToDO
-# remove car+trophy groups
 
 WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
 IMAGEPATH = 'Race_Game/images/'
@@ -37,8 +40,8 @@ class CarSprite(pygame.sprite.Sprite):
     
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
-        self.src_image = pygame.image.load(image)
         self.position = position
+        self.src_image = pygame.image.load(image)        
         self.speed = 0
         self.direction = 320
         self.MAX_SPEED = MAX_SPEED
@@ -63,32 +66,21 @@ class CarSprite(pygame.sprite.Sprite):
         self.image = pygame.transform.rotate(self.src_image, self.direction)
         self.rect = self.image.get_rect()
         self.rect.center = self.position
-        # return obsrevations etc. for training
-        state = (self.position[0], self.position[1], self.direction, self.speed)
-        return state
 
 class PadSprite(pygame.sprite.Sprite):
-    # Dimensions: PadSprite((100,100))#x: -150,350, y: 113, 88 = +/-250 in x, +/- 13 in y = size 500, 25
-    normal = pygame.image.load(IMAGEPATH+'race_pads.png')
-    hit = pygame.image.load(IMAGEPATH+'collision.png')
-    def __init__(self, position):
+    def __init__(self, position, width, height=25):
         super(PadSprite, self).__init__()
-        self.rect = pygame.Rect(self.normal.get_rect())
+        self.image = pygame.Surface((width, height))
+        self.image.fill((128, 128, 128))  # Fill the pad with a color (red in this case)
+        self.rect = self.image.get_rect()
         self.rect.center = position
-    def update(self, hit_list):
-        # if car collided with pad, change image to hit
-        if self in hit_list:
-            self.image = self.hit
-        else:
-            self.image = self.normal
 
 class CheckpointSprite(pygame.sprite.Sprite):
     def __init__(self, position, width=150, height=25):
         super(CheckpointSprite, self).__init__()
-        #self.rect = pygame.Rect(0, 0, width, height)
-        #self.rect.center = position
         self.image = pygame.Surface((width, height))
         self.image.fill((255, 0, 0))  # Fill the pad with a color (red in this case)
+        self.image.set_alpha(120)
         self.rect = self.image.get_rect()
         self.rect.center = position
 
@@ -104,7 +96,7 @@ class Trophy(pygame.sprite.Sprite):
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     # Screen definition (x,y): Top left: (0,0), Bottom right: (1024,768)
-    def __init__(self,env_config={}):
+    def __init__(self):
         # win/fail message in terminal
         self.message_printed = False
         # initialize pygame
@@ -113,9 +105,9 @@ class RaceEnv(gym.Env):
         self.clock = pygame.time.Clock()
         # Initialize variables
         self.win_condition = None 
-        # create obstacles
-        pads_list = [(0,10), (600,10), (1100,10), (100,150), (600,150), (100,300), (800,300), (400,450), (900,450), (200,600), (900,600), (400,750), (800,750)]
-        self.pads = [PadSprite(pad) for pad in pads_list]
+        # create obstacles (x,y,width)
+        pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((600,750),900)]
+        self.pads = [PadSprite(position, width) for position, width in pads_list]
         self.pad_group = pygame.sprite.Group(*self.pads)
         # define y-checkpoints (if it passes through y of obstacles)
         checkpoints_list = [(550,600),(50,450), (450,300), (950,150)]
@@ -124,10 +116,10 @@ class RaceEnv(gym.Env):
         self.checkpoint_counter = 0
         self.checkpoint_reward = 0
         # create trophy
-        self.trophy = Trophy((285,0))
+        self.trophy = Trophy((280,0))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
-        self.car = CarSprite(IMAGEPATH+'car.png', (10, 730))
+        self.car = CarSprite(IMAGEPATH+'car.png', (60, 710))
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation       
 
     def init_render(self):      
@@ -159,9 +151,16 @@ class RaceEnv(gym.Env):
         self.__init__()
         self.screenmessage = ''
         # give out current state
-        state = (self.car.position[0], self.car.position[1], self.car.direction, self.car.speed)
+        state = self.get_state()
         return state
 
+    def get_state(self):
+        # to all four sides of the car calculate minimum distance to outside of pads + walls
+        min_distances = self.calculate_distance_to_pads_walls()
+        # return obsrevations etc. for training
+        state = np.concatenate([min_distances, np.array([self.car.direction, self.car.speed])])
+        return state       
+        
 
     def calculate_reward(self):
         # calculate the reward based on the current state
@@ -205,7 +204,7 @@ class RaceEnv(gym.Env):
         if np.any(close_miss_pad): reward.append(BUFFER_PENALTY)
 
         # ##distance to outside of closest pad (doenst work)
-        #distance_pads = round(self.calculate_distance_to_pads(),1)
+        distance_pads = np.round(self.calculate_distance_to_pads_walls(),0)
         
         # ### distance to trophy
         # distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
@@ -222,7 +221,7 @@ class RaceEnv(gym.Env):
                     self.checkpoint_counter += 1
         reward.append(self.checkpoint_reward)
 
-        ### euclidian distance to next checkpoint
+        ### distance to next checkpoint
         distance_checkpoint = np.array(self.car.rect.center) - np.array(self.checkpoints[self.checkpoint_counter].rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 
         distance_checkpoint_print = (np.abs(distance_checkpoint) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))
@@ -235,24 +234,25 @@ class RaceEnv(gym.Env):
         # Overwrite if fail or success
         if self.win_condition is not None:
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
-        self.screenmessage = f"{self.reward}, {distance_checkpoint_print}"
+        self.screenmessage = f"{self.reward}, {distance_pads}"
 
-    def calculate_distance_to_pads(self):
-        car_center = np.array(self.car.rect.center)
-        distances = []
-        for pad in self.pads:
+    def calculate_distance_to_pads_walls(self):
+        car_center = np.array(self.car.position)
+        dist_array = np.full((4,len(self.pads)+1), np.inf)
+        # distance to walls
+        dist_array[0,0] = car_center[1]  # Distance to left wall
+        dist_array[1,0] = WINDOW_WIDTH - car_center[1]
+        dist_array[2,0] = car_center[0]
+        dist_array[3,0] = WINDOW_HEIGHT - car_center[0]
+        for i, pad in enumerate(self.pads):
             pad_rect = pad.rect
-            pad_distances = [
-                #np.linalg.norm(car_center - np.array([pad_rect.left, car_center[0]])),  # Distance to left edge
-                #np.linalg.norm(car_center - np.array([pad_rect.right, car_center[0]])),  # Distance to right edge
-                #np.linalg.norm(car_center - np.array([car_center[0], pad_rect.top])),  # Distance to top edge
-                #np.linalg.norm(car_center - np.array([car_center[0], pad_rect.bottom]))  # Distance to bottom edge
-                car_center[1]- pad_rect.top,
-                car_center[1]- pad_rect.bottom
-            ]
-            distances.append(min(pad_distances))
-            min_distance = min(distances)/100
-        return min_distance
+            # distance to pads
+            dist_array[0,i+1] = car_center[1] - np.array([pad_rect.left])  # Distance to left edge
+            dist_array[1,i+1] = car_center[1] - np.array([pad_rect.right])  # Distance to right edge
+            dist_array[2,i+1] = car_center[0] - np.array([pad_rect.top])  # Distance to top edge
+            dist_array[3,i+1] = car_center[0] - np.array([pad_rect.bottom])  # Distance to bottom edge
+        min_distances = np.min(np.abs(dist_array), axis=1)
+        return min_distances
     
     def plot_reward_map(self):
         reward_map = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -270,12 +270,14 @@ class RaceEnv(gym.Env):
     def step(self, action):
         # perform one step in the game logic
         # move car
-        state = self.car.update(action)
+        self.car.update(action)
+        # get state
+        state = self.get_state()
         # check collision, calc reward
         done = self.calculate_reward()
         # print win/loss message
         if self.win_condition is not None:
-            self.screenmessage = ['You fucked up', 'Finished!'][int(self.win_condition)]
+            self.screenmessage = ['You messed up', 'Finished!'][int(self.win_condition)]
             while self.message_printed == False:
                 #print(self.screenmessage)
                 self.message_printed = True
