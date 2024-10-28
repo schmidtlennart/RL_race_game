@@ -31,7 +31,7 @@ all_bins = [distance_l,distance_r, distance_t, distance_b, direction_bins, speed
 # action space
 actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward, 3: left, 4: right
 # initialize Q-table
-q_table = np.random.uniform(low=-1, high=0, size= [len(distance_l)-1, len(distance_r)-1, len(distance_t)-1, len(distance_b)-1, len(direction_bins)-1, len(speed_bins)-1, len(actions)])
+q_table = np.random.uniform(low=-0.5, high=0, size= [len(distance_l)-1, len(distance_r)-1, len(distance_t)-1, len(distance_b)-1, len(direction_bins)-1, len(speed_bins)-1, len(actions)])
 
 q_table.size
 

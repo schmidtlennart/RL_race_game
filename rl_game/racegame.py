@@ -1,16 +1,24 @@
 ### ToDO
+# more weight to distnce to checkpoint in reward
 # add distance/direction to checkpoint into state
-# clean distance to obstacles
+# clean distance to obstacles -> maybe as "angle + distance" to closest obstacles?
 # more buffers as distance to buffer in rewar --> smoother rewardmap
 # check initilalization vs reward changes
 # record Qvalues/path/final location
 
-import pygame, math, time
+import pygame, math
 import numpy as np
 from pygame.locals import *
 import gym
 
 WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
+WALLS = [
+    ((0, 0), (0, WINDOW_HEIGHT)),          # Left wall
+    ((0, 0), (WINDOW_WIDTH, 0)),           # Top wall
+    ((WINDOW_WIDTH, 0), (WINDOW_WIDTH, WINDOW_HEIGHT)),  # Right wall
+    ((0, WINDOW_HEIGHT), (WINDOW_WIDTH, WINDOW_HEIGHT))  # Bottom wall
+]
+
 IMAGEPATH = 'Race_Game/images/'
 
 ### Reward Parameters
@@ -18,14 +26,15 @@ MAX_REWARD = 20
 CHECKPOINT_REWARD = MAX_REWARD/8
 MAX_PENALTY = -20
 BUFFER_RATIO = 2 #buffered car = car size * BUFFER_RATIO
-BUFFER_PENALTY = -2 #if exceeding safety buffer to walls + obstacles
+BUFFER_PENALTY = -15 #if exceeding safety buffer to walls + obstacles
 
 # Car Parameters
 MAX_SPEED = 8
 ACCELERATION = 0.5
 TURN_ACCELERATION = 5
+VIEW = 80
     
-
+### Helper functions: How to put into separate file?
 # Function to scale the car rectangle by ratio for near miss calculation
 def scale_rect(rect, ratio):
     new_width = rect.width * ratio
@@ -36,12 +45,40 @@ def scale_rect(rect, ratio):
     new_rect.center = rect.center  # Keep the center the same
     return new_rect
 
+# find point of intersection between two lines
+def find_intersection(line1, line2):
+    # Unpack the points
+    (x1, y1), (x2, y2) = line1
+    (x3, y3), (x4, y4) = line2
+
+    # Calculate the coefficients of the lines
+    A1 = y2 - y1
+    B1 = x1 - x2
+    C1 = A1 * x1 + B1 * y1
+
+    A2 = y4 - y3
+    B2 = x3 - x4
+    C2 = A2 * x3 + B2 * y3
+
+    # Set up the system of equations
+    A = np.array([[A1, B1], [A2, B2]])
+    B = np.array([C1, C2])
+
+    # Check if the lines are parallel
+    if np.linalg.det(A) == 0:
+        return ()  # Lines are parallel and do not intersect
+
+    # Solve the system of equations
+    intersection = np.linalg.solve(A, B)
+    return (intersection[0],intersection[1])
+
 class CarSprite(pygame.sprite.Sprite):
-    
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
         self.position = position
-        self.src_image = pygame.image.load(image)        
+        self.src_image = pygame.image.load(image) 
+        self.rect = self.src_image.get_rect()
+        self.rect.center = self.position
         self.speed = 0
         self.direction = 320
         self.MAX_SPEED = MAX_SPEED
@@ -66,6 +103,7 @@ class CarSprite(pygame.sprite.Sprite):
         self.image = pygame.transform.rotate(self.src_image, self.direction)
         self.rect = self.image.get_rect()
         self.rect.center = self.position
+
 
 class PadSprite(pygame.sprite.Sprite):
     def __init__(self, position, width, height=25):
@@ -106,8 +144,8 @@ class RaceEnv(gym.Env):
         # Initialize variables
         self.win_condition = None 
         # create obstacles (x,y,width)
-        pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((600,750),900)]
-        self.pads = [PadSprite(position, width) for position, width in pads_list]
+        self.pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((600,750),900)]
+        self.pads = [PadSprite(position, width) for position, width in self.pads_list]
         self.pad_group = pygame.sprite.Group(*self.pads)
         # define y-checkpoints (if it passes through y of obstacles)
         checkpoints_list = [(550,600),(50,450), (450,300), (950,150)]
@@ -120,7 +158,9 @@ class RaceEnv(gym.Env):
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
         self.car = CarSprite(IMAGEPATH+'car.png', (60, 710))
-        self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation       
+        self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
+        # calculate whiskers
+        self.calculate_whiskers()       
 
     def init_render(self):      
         # render obstacles, car, trophy 
@@ -139,6 +179,8 @@ class RaceEnv(gym.Env):
         self.screen.fill((0,0,0))# empty screen        
         self.pad_group.update(self.collisions)#change pad image if hit
         self.car_group.draw(self.screen)#draw car
+        for w in self.whiskers:
+            pygame.draw.line(self.screen, "white", *w)
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
         self.checkpoint_group.draw(self.screen)
@@ -155,10 +197,8 @@ class RaceEnv(gym.Env):
         return state
 
     def get_state(self):
-        # to all four sides of the car calculate minimum distance to outside of pads + walls
-        min_distances = self.calculate_distance_to_pads_walls()
         # return obsrevations etc. for training
-        state = np.concatenate([min_distances, np.array([self.car.direction, self.car.speed])])
+        state = np.concatenate([self.distances, np.array([self.car.direction, self.car.speed])])
         return state       
         
 
@@ -204,7 +244,7 @@ class RaceEnv(gym.Env):
         if np.any(close_miss_pad): reward.append(BUFFER_PENALTY)
 
         # ##distance to outside of closest pad (doenst work)
-        distance_pads = np.round(self.calculate_distance_to_pads_walls(),0)
+        distance_pads = np.round(self.distances,0)
         
         # ### distance to trophy
         # distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
@@ -229,40 +269,82 @@ class RaceEnv(gym.Env):
         distance_checkpoint = 1-np.sum(distance_checkpoint_print)
         reward.append(distance_checkpoint)
         ### sum up all penalties
-        self.reward = round(sum(reward),1)# + distance_trophy,1)# + distance_pads,1)
+        self.reward = sum(reward)# + distance_trophy,1)# + distance_pads,1)
 
         # Overwrite if fail or success
         if self.win_condition is not None:
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
-        self.screenmessage = f"{self.reward}, {distance_pads}"
+        self.screenmessage = f"{round(self.reward,1)}, {distance_pads}"
 
-    def calculate_distance_to_pads_walls(self):
-        car_center = np.array(self.car.position)
-        dist_array = np.full((4,len(self.pads)+1), np.inf)
-        # distance to walls
-        dist_array[0,0] = car_center[1]  # Distance to left wall
-        dist_array[1,0] = WINDOW_WIDTH - car_center[1]
-        dist_array[2,0] = car_center[0]
-        dist_array[3,0] = WINDOW_HEIGHT - car_center[0]
-        for i, pad in enumerate(self.pads):
-            pad_rect = pad.rect
-            # distance to pads
-            dist_array[0,i+1] = car_center[1] - np.array([pad_rect.left])  # Distance to left edge
-            dist_array[1,i+1] = car_center[1] - np.array([pad_rect.right])  # Distance to right edge
-            dist_array[2,i+1] = car_center[0] - np.array([pad_rect.top])  # Distance to top edge
-            dist_array[3,i+1] = car_center[0] - np.array([pad_rect.bottom])  # Distance to bottom edge
-        min_distances = np.min(np.abs(dist_array), axis=1)
-        return min_distances
-    
+    def calculate_whiskers(self):
+        # whiskers to "see" surrounding objects if whiskers collide with them at a given distance
+        view = VIEW
+        view_c = 0.75*view
+        self.whiskers = [(self.car.position, (self.car.position[0], self.car.position[1]-view)),#top
+                (self.car.position, (self.car.position[0]+view, self.car.position[1])),#right
+                (self.car.position, (self.car.position[0], self.car.position[1]+view)),#bottom
+                (self.car.position, (self.car.position[0]-view, self.car.position[1])),#left  
+                (self.car.position, (self.car.position[0]-view_c, self.car.position[1]-view_c)),#top left
+                (self.car.position, (self.car.position[0]+view_c, self.car.position[1]-view_c)),#top right
+                (self.car.position, (self.car.position[0]-view_c, self.car.position[1]+view_c)),#bottom left
+                (self.car.position, (self.car.position[0]+view_c, self.car.position[1]+view_c))] #bottom right
+        
+        # get collision points of whiskers with other objects
+        w_collisions = []
+        w_distances = []
+        for w in self.whiskers:
+            ### for each whisker, calculate collisions with all pads
+            w_collisions_w = [pad.rect.clipline(*w) for pad in self.pads]
+            ### collisions with walls
+            ### DOES NOT WORK
+            # for wall in WALLS:
+            #     wall_collision = find_intersection(wall,w)
+            #     w_collisions_w.append(wall_collision)
+            # #print(w_collisions_w)
+            # correct: drop empty tuples, keep only tuple (x,y) of actual collision points
+            w_collisions_w = [wcp[0] for wcp in w_collisions_w if wcp != ()]
+            # calculate distance to collision points
+            if w_collisions_w != []:
+                [print(wcp) for wcp in w_collisions_w]
+                w_distances_pads = np.array([np.linalg.norm(self.car.position - np.array(wcp)) for wcp in w_collisions_w])
+                w_argmin = w_distances_pads.argmin()#get closest collision
+                w_collisions.append(w_collisions_w[w_argmin])            
+            else:
+                w_distances_pads = np.array([view*1.1]) # if none is close enough, set artificially "further away than view" for this whisker
+            w_distances.append(w_distances_pads.min())
+        self.whisker_collisions = w_collisions
+        self.distances = w_distances
+
+
+
+    # def calculate_distance_to_pads_walls(self):
+    #     car_center = np.array(self.car.position)
+    #     dist_array = np.full((4,len(self.pads)+1), np.inf)
+    #     # distance to walls
+    #     dist_array[0,0] = car_center[1]  # Distance to left wall
+    #     dist_array[1,0] = WINDOW_WIDTH - car_center[1]
+    #     dist_array[2,0] = car_center[0]
+    #     dist_array[3,0] = WINDOW_HEIGHT - car_center[0]
+    #     for i, pad in enumerate(self.pads):
+    #         pad_rect = pad.rect
+    #         # distance to pads
+    #         dist_array[0,i+1] = car_center[1] - np.array([pad_rect.left])  # Distance to left edge
+    #         dist_array[1,i+1] = car_center[1] - np.array([pad_rect.right])  # Distance to right edge
+    #         dist_array[2,i+1] = car_center[0] - np.array([pad_rect.top])  # Distance to top edge
+    #         dist_array[3,i+1] = car_center[0] - np.array([pad_rect.bottom])  # Distance to bottom edge
+    #     min_distances = np.min(np.abs(dist_array), axis=1)
+    #     return min_distances
+
     def plot_reward_map(self):
         reward_map = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT))
-        # plot the reward map
-        for x in range(0, WINDOW_WIDTH):
-            for y in range(0, WINDOW_HEIGHT):
-                print(x)
-                self.car.rect.center = (x,y)
+        # plot the reward map       
+        for y in range(WINDOW_HEIGHT-1, -1,-1):
+            print(y)
+            for x in range(0, WINDOW_WIDTH):
+                #print(x)
+                self.car.position = (x,y)
                 # skip if center inside any of the pad
-                if not any([pad.rect.collidepoint(self.car.rect.center) for pad in self.pads]):                
+                if not any([pad.rect.collidepoint(self.car.position) for pad in self.pads]):                
                     self.reward_func()
                     reward_map[x,y] = self.reward
         return(reward_map)
@@ -271,6 +353,8 @@ class RaceEnv(gym.Env):
         # perform one step in the game logic
         # move car
         self.car.update(action)
+        # calculate whiskers
+        self.calculate_whiskers()
         # get state
         state = self.get_state()
         # check collision, calc reward
