@@ -45,32 +45,52 @@ def scale_rect(rect, ratio):
     new_rect.center = rect.center  # Keep the center the same
     return new_rect
 
-# find point of intersection between two lines
+# # find point of intersection between two lines
+# def find_intersection(line1, line2):
+#     # Unpack the points
+#     (x1, y1), (x2, y2) = line1
+#     (x3, y3), (x4, y4) = line2
+
+#     # Calculate the coefficients of the lines
+#     A1 = y2 - y1
+#     B1 = x1 - x2
+#     C1 = A1 * x1 + B1 * y1
+
+#     A2 = y4 - y3
+#     B2 = x3 - x4
+#     C2 = A2 * x3 + B2 * y3
+
+#     # Set up the system of equations
+#     A = np.array([[A1, B1], [A2, B2]])
+#     B = np.array([C1, C2])
+
+#     # Check if the lines are parallel
+#     if np.linalg.det(A) == 0:
+#         return ()  # Lines are parallel and do not intersect
+
+#     # Solve the system of equations
+#     ix, iy = np.linalg.solve(A, B)
+#     if (min(x1, x2) <= ix <= max(x1, x2) and min(y1, y2) <= iy <= max(y1, y2) and min(x3, x4) <= ix <= max(x3, x4) and min(y3, y4) <= iy <= max(y3, y4)):
+#         return (ix, iy)
+#     else:
+#         return ()  # Intersection point is not within the bounds of both line segments
+
+# intersection between line(p1, p2) and line(p3, p4)
 def find_intersection(line1, line2):
-    # Unpack the points
     (x1, y1), (x2, y2) = line1
     (x3, y3), (x4, y4) = line2
-
-    # Calculate the coefficients of the lines
-    A1 = y2 - y1
-    B1 = x1 - x2
-    C1 = A1 * x1 + B1 * y1
-
-    A2 = y4 - y3
-    B2 = x3 - x4
-    C2 = A2 * x3 + B2 * y3
-
-    # Set up the system of equations
-    A = np.array([[A1, B1], [A2, B2]])
-    B = np.array([C1, C2])
-
-    # Check if the lines are parallel
-    if np.linalg.det(A) == 0:
-        return ()  # Lines are parallel and do not intersect
-
-    # Solve the system of equations
-    intersection = np.linalg.solve(A, B)
-    return (intersection[0],intersection[1])
+    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
+    if denom == 0: # parallel
+        return ()
+    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
+    if ua < 0 or ua > 1: # out of range
+        return ()
+    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
+    if ub < 0 or ub > 1: # out of range
+        return ()
+    x = x1 + ua * (x2-x1)
+    y = y1 + ua * (y2-y1)
+    return (x,y)
 
 class CarSprite(pygame.sprite.Sprite):
     def __init__(self, image, position):
@@ -297,9 +317,9 @@ class RaceEnv(gym.Env):
             w_collisions_w = [pad.rect.clipline(*w) for pad in self.pads]
             ### collisions with walls
             ### DOES NOT WORK
-            # for wall in WALLS:
-            #     wall_collision = find_intersection(wall,w)
-            #     w_collisions_w.append(wall_collision)
+            for wall in WALLS:
+                wall_collision = find_intersection(wall,w)
+                w_collisions_w.append(wall_collision)
             # #print(w_collisions_w)
             # correct: drop empty tuples, keep only tuple (x,y) of actual collision points
             w_collisions_w = [wcp[0] for wcp in w_collisions_w if wcp != ()]
