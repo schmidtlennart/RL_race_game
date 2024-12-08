@@ -37,14 +37,14 @@ fig.colorbar(im, ax=ax1)
 ax1.scatter(initial_car_position[0], initial_car_position[1], c='red')
 # Get pads and overlay as gray rectangles from .left, .right, .top, .bottom
 for pad in environment.pads:
-    ax1.add_patch(plt.Rectangle((pad.rect.left, pad.rect.top), pad.rect.width, pad.rect.height, fill=False, edgecolor='darkgray', lw=1))
+    ax1.add_patch(plt.Rectangle((pad.rect.left, pad.rect.top), pad.rect.width, pad.rect.height, fill=True, edgecolor='darkgray', color="white", lw=1))
 # Set xlims to window width, ylims to window height
 ax1.set_xlim(0, WINDOW_WIDTH)
 ax1.set_ylim(WINDOW_HEIGHT, 0)
 ax1.set_title('Reward Map')
 
 # Plot the histogram of reward values in the second subplot
-ax2.hist(reward_map[~np.isnan(reward_map)].flatten(), bins=50, color='blue', edgecolor='black')
+ax2.hist(reward_map[~np.isnan(reward_map)].flatten(), bins=50, color='green', alpha=0.4, edgecolor='black')
 ax2.set_title('Histogram of Reward Values')
 ax2.set_xlabel('Reward Value')
 ax2.set_ylabel('Frequency')

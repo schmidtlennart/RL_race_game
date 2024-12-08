@@ -4,6 +4,7 @@
 # distance to checkpoint stronger
 # check initilalization vs reward changes
 # Analysis: record Qvalues/path/ final location as in highest y
+# There is no penalty for top wall yet because of trophy, fix
 
 
 import pygame, math
@@ -117,9 +118,14 @@ class PadSprite(pygame.sprite.Sprite):
 class CheckpointSprite(pygame.sprite.Sprite):
     def __init__(self, position, width=150, height=25):
         super(CheckpointSprite, self).__init__()
-        self.image = pygame.Surface((width, height))
-        self.image.fill((255, 0, 0))  # Fill the pad with a color (red in this case)
-        self.image.set_alpha(120)
+        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
+        self.image.fill((255, 204, 203, 255))  # Fill with white color and set transparency
+
+        # Create a dotted pattern
+        dot_spacing = 5
+        for x in range(0, width, dot_spacing):
+            for y in range(0, height, dot_spacing):
+                self.image.set_at((x, y), (0, 0, 0, 0))  # Set dots to be fully transparent
         self.rect = self.image.get_rect()
         self.rect.center = position
 
@@ -145,7 +151,7 @@ class RaceEnv(gym.Env):
         # Initialize variables
         self.win_condition = None 
         # create obstacles (x,y,width)
-        self.pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((500,750),1100)]
+        self.pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((500,760),1100)]
         self.pads = [PadSprite(position, width) for position, width in self.pads_list]
         self.pad_group = pygame.sprite.Group(*self.pads)
         # Explicit Guidance: define y-checkpoints on the way to trophy (if it passes through y of obstacles)
@@ -173,7 +179,7 @@ class RaceEnv(gym.Env):
         self.trophy_group = pygame.sprite.RenderPlain(self.trophy_group)
         self.checkpoint_group = pygame.sprite.RenderPlain(self.checkpoint_group)
         # set up font
-        self.font = pygame.font.Font(None, 40)
+        self.font = pygame.font.Font(None, 20)
         self.screenmessage = self.font.render('', True, (255,0,0))
         # set up game window
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -188,7 +194,7 @@ class RaceEnv(gym.Env):
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
         self.checkpoint_group.draw(self.screen)
-        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (150, 700))
+        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (630, 730))
         pygame.display.flip()
 
     def reset(self, random_start = False):
@@ -237,12 +243,13 @@ class RaceEnv(gym.Env):
 
     def reward_func(self):
         reward = [0]
+        ### No-Go Zones around walls and pads
         # buffer around car
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
         ### if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
-        if (buffered_car.left < 0) or (buffered_car.right > WINDOW_WIDTH) or (buffered_car.bottom > WINDOW_HEIGHT): 
-            reward.append(BUFFER_PENALTY*2)
-        # if too close to pads as buffer penalty or 0
+        if (buffered_car.left < 0) or (buffered_car.right > WINDOW_WIDTH) or (buffered_car.bottom > WINDOW_HEIGHT):
+            reward.append(BUFFER_PENALTY)
+        # if too close to pads
         close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
         if np.any(close_miss_pad): reward.append(BUFFER_PENALTY)
 
@@ -278,7 +285,8 @@ class RaceEnv(gym.Env):
         # Overwrite if fail or success
         if self.win_condition is not None:
             self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
-        self.screenmessage = f"{round(self.reward,1)}, {distance_penalty[4:]}"
+        
+        self.screenmessage = f"Reward: {round(self.reward,1)} Min. Wall Distance: {min(distance_penalty)} Checkpoint Distance: {self.checkpoint_reward}"
 
     def calculate_whiskers(self):
         # whiskers to "see" surrounding objects if whiskers collide with them at a given distance

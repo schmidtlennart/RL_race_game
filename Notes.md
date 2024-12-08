@@ -2,7 +2,7 @@
 
 **Current To Dos:**
 
-* Fix reward map
+* Reward map: Wall+pad penalty have to stay the same everywhere, separate reward maps for all components
 * Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
 * Reduce action space: Drop 0:None
 * Why collisions: Plot min(distances) ~ Q, does Q decrease? Does Q decrease towards end of episode?
