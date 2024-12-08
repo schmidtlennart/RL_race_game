@@ -10,37 +10,53 @@ environment.init_render()
 action = environment.pressed_to_action()
 # initial step
 new_state, reward, done = environment.step(action)
-initial_car_position = environment.car.position
+initial_car_position = environment.car.rect.center
 
-#d = environment.calculate_distance_to_pads()
-
-map = environment.plot_reward_map()
+reward_map = environment.compute_reward_map()
 pygame.quit()
+
+
 # to float32
-map = np.array(map, dtype=np.float32)
-map = map.T
-
-
-plt.imshow(map, interpolation="none")#, norm="log")
-plt.colorbar()
-# plot initial car position as red dot
-plt.scatter(initial_car_position[0], initial_car_position[1], c='red')
-# get pads and overlay as gray rectangles from .left, .right, .top, .bottom
-for pad in environment.pads:
-    plt.gca().add_patch(plt.Rectangle((pad.rect.left, pad.rect.top), pad.rect.width, pad.rect.height, fill=False, edgecolor='darkgray', lw=1))
-# set xlims to window width, ylims to window height
-plt.xlim(0, WINDOW_WIDTH)
-plt.ylim(WINDOW_HEIGHT,0)
-# save to png
-plt.savefig('images/reward_map_3.png', dpi=300)
-plt.close()
+reward_map = np.array(reward_map, dtype=np.float32)
+reward_map = reward_map.T
 
 # save to numpy
-np.save('results/reward_map_3.npy', map)
+np.save('results/reward_map.npy', reward_map)
 
 
+reward_map = np.load('results/reward_map.npy')
+#np.unique(reward_map, return_counts=True)
 
-map = np.load('results/reward_map_3.npy')
+# Create a 2x1 subplot
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 10))
+
+# Plot the reward map in the first subplot
+im = ax1.imshow(reward_map, interpolation="none")
+fig.colorbar(im, ax=ax1)
+# Plot initial car position as red dot
+ax1.scatter(initial_car_position[0], initial_car_position[1], c='red')
+# Get pads and overlay as gray rectangles from .left, .right, .top, .bottom
+for pad in environment.pads:
+    ax1.add_patch(plt.Rectangle((pad.rect.left, pad.rect.top), pad.rect.width, pad.rect.height, fill=False, edgecolor='darkgray', lw=1))
+# Set xlims to window width, ylims to window height
+ax1.set_xlim(0, WINDOW_WIDTH)
+ax1.set_ylim(WINDOW_HEIGHT, 0)
+ax1.set_title('Reward Map')
+
+# Plot the histogram of reward values in the second subplot
+ax2.hist(reward_map[~np.isnan(reward_map)].flatten(), bins=50, color='blue', edgecolor='black')
+ax2.set_title('Histogram of Reward Values')
+ax2.set_xlabel('Reward Value')
+ax2.set_ylabel('Frequency')
+
+# Save to PNG
+plt.tight_layout()
+plt.savefig('images/reward_map.png', dpi=300)
+plt.close()
+
+
+reward_map.min()
+reward_map.max()
 # min_index = np.argmin(m)
 
 # # Convert the flattened index to coordinates in the 2D array

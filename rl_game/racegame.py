@@ -78,10 +78,9 @@ def get_wall_collision(wall, whisker):
 class CarSprite(pygame.sprite.Sprite):
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
-        self.position = position
         self.src_image = pygame.image.load(image) 
         self.rect = self.src_image.get_rect()
-        self.rect.center = self.position
+        self.rect.center = position
         self.speed = 0
         self.direction = 320
         self.MAX_SPEED = MAX_SPEED
@@ -97,15 +96,15 @@ class CarSprite(pygame.sprite.Sprite):
         self.direction += action[1]*TURN_ACCELERATION
         self.direction %= 360 #needs remapping to [0,359] because can take any value
         # calculate new position
-        x, y = (self.position)
+        x, y = (self.rect.center)
         rad = self.direction * math.pi / 180
         x += -self.speed*math.sin(rad)
         y += -self.speed*math.cos(rad)
-        self.position = (x, y)
+        position = (x, y)
         # rotate image + rect accordingly
         self.image = pygame.transform.rotate(self.src_image, self.direction)
         self.rect = self.image.get_rect()
-        self.rect.center = self.position
+        self.rect.center = position
 
 
 class PadSprite(pygame.sprite.Sprite):
@@ -115,7 +114,6 @@ class PadSprite(pygame.sprite.Sprite):
         self.image.fill((128, 128, 128))  # Fill the pad with a color (red in this case)
         self.rect = self.image.get_rect()
         self.rect.center = position
-
 class CheckpointSprite(pygame.sprite.Sprite):
     def __init__(self, position, width=150, height=25):
         super(CheckpointSprite, self).__init__()
@@ -136,8 +134,8 @@ class Trophy(pygame.sprite.Sprite):
 
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
-    # Screen definition (x,y): Top left: (0,0), Bottom right: (1024,768)
-    def __init__(self):
+    # Screen definition (x,y): Top left: (0,0), Bottom right: (WINDOW_WIDTH,WINDOW_HEIGHT)
+    def __init__(self, random_start = False):
         # win/fail message in terminal
         self.message_printed = False
         # initialize pygame
@@ -150,7 +148,7 @@ class RaceEnv(gym.Env):
         self.pads_list = [((50, 10), 400), ((740, 10), 800), ((400,150),900), ((150,300),400), ((800,300),500), ((600,450),900), ((50,600),800),((850,600),400), ((500,750),1100)]
         self.pads = [PadSprite(position, width) for position, width in self.pads_list]
         self.pad_group = pygame.sprite.Group(*self.pads)
-        # define y-checkpoints (if it passes through y of obstacles)
+        # Explicit Guidance: define y-checkpoints on the way to trophy (if it passes through y of obstacles)
         checkpoints_list = [(550,600),(50,450), (450,300), (950,150)]
         self.checkpoints = [CheckpointSprite(checkpoint) for checkpoint in checkpoints_list]
         self.checkpoint_group = pygame.sprite.Group(self.checkpoints)
@@ -160,7 +158,10 @@ class RaceEnv(gym.Env):
         self.trophy = Trophy((280,0))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
-        self.car = CarSprite(IMAGEPATH+'car.png', (60, 710))
+        start_position = (60, 710)
+        if random_start:
+            start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
+        self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
         # calculate whiskers
         self.calculate_whiskers()       
@@ -190,10 +191,10 @@ class RaceEnv(gym.Env):
         self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (150, 700))
         pygame.display.flip()
 
-    def reset(self):
+    def reset(self, random_start = False):
         # reset the environment to initial state
         #return observation
-        self.__init__()
+        self.__init__(random_start)
         self.screenmessage = ''
         # give out current state
         state = self.get_state()
@@ -283,14 +284,14 @@ class RaceEnv(gym.Env):
         # whiskers to "see" surrounding objects if whiskers collide with them at a given distance
         view = VIEW
         view_c = 0.75*view #diagonal ones
-        self.whiskers = [(self.car.position, (self.car.position[0], self.car.position[1]-view)),#top
-                (self.car.position, (self.car.position[0]+view, self.car.position[1])),#right
-                (self.car.position, (self.car.position[0], self.car.position[1]+view)),#bottom
-                (self.car.position, (self.car.position[0]-view, self.car.position[1])),#left  
-                (self.car.position, (self.car.position[0]+view_c, self.car.position[1]-view_c)),#top right
-                (self.car.position, (self.car.position[0]+view_c, self.car.position[1]+view_c)), #bottom right
-                (self.car.position, (self.car.position[0]-view_c, self.car.position[1]+view_c)),#bottom left
-                (self.car.position, (self.car.position[0]-view_c, self.car.position[1]-view_c))]#top left
+        self.whiskers = [(self.car.rect.center, (self.car.rect.center[0], self.car.rect.center[1]-view)),#top
+                (self.car.rect.center, (self.car.rect.center[0]+view, self.car.rect.center[1])),#right
+                (self.car.rect.center, (self.car.rect.center[0], self.car.rect.center[1]+view)),#bottom
+                (self.car.rect.center, (self.car.rect.center[0]-view, self.car.rect.center[1])),#left  
+                (self.car.rect.center, (self.car.rect.center[0]+view_c, self.car.rect.center[1]-view_c)),#top right
+                (self.car.rect.center, (self.car.rect.center[0]+view_c, self.car.rect.center[1]+view_c)), #bottom right
+                (self.car.rect.center, (self.car.rect.center[0]-view_c, self.car.rect.center[1]+view_c)),#bottom left
+                (self.car.rect.center, (self.car.rect.center[0]-view_c, self.car.rect.center[1]-view_c))]#top left
         
         # get collision points of whiskers with other objects
         w_collisions = []
@@ -312,7 +313,7 @@ class RaceEnv(gym.Env):
             w_collisions_w = [wcp[0] for wcp in w_collisions_w if wcp != ()]
             # calculate distance to collision points
             if w_collisions_w != []:
-                w_distances_pads = np.array([np.linalg.norm(self.car.position - np.array(wcp)) for wcp in w_collisions_w])
+                w_distances_pads = np.array([np.linalg.norm(self.car.rect.center - np.array(wcp)) for wcp in w_collisions_w])
                 w_argmin = w_distances_pads.argmin()#get closest collision
                 w_collisions.append(w_collisions_w[w_argmin])            
             else: # no collision between whisker and pad/wall
@@ -321,16 +322,16 @@ class RaceEnv(gym.Env):
         self.whisker_collisions = w_collisions
         self.distances = w_distances
 
-    def plot_reward_map(self):
-        reward_map = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT))
-        # plot the reward map       
+    def compute_reward_map(self):
+        reward_map = np.full((WINDOW_WIDTH, WINDOW_HEIGHT), np.nan)
+        # compute the reward map       
         for y in range(WINDOW_HEIGHT-1, -1,-1):
             print(y)
             for x in range(0, WINDOW_WIDTH):
                 #print(x)
-                self.car.position = (x,y)
-                # skip if center inside any of the pad
-                if not any([pad.rect.collidepoint(self.car.position) for pad in self.pads]):                
+                self.car.rect.center = (x,y)
+                # skip if center inside any of the pads
+                if not any([pad.rect.collidepoint(self.car.rect.center) for pad in self.pads]):                
                     self.reward_func()
                     reward_map[x,y] = self.reward
         return(reward_map)

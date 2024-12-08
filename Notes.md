@@ -1,2 +1,19 @@
 "Even with a discount factor only slightly lower than 1, Q-function learning leads to propagation of errors and instabilities when the value function is approximated with an artificial neural network.[7] In that case, starting with a lower discount factor and increasing it towards its final value accelerates learning.[8]"
 
+**Current To Dos:**
+
+* Fix reward map
+* Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
+* Reduce action space: Drop 0:None
+* Why collisions: Plot min(distances) ~ Q, does Q decrease? Does Q decrease towards end of episode?
+* Logging: Plot (cumulative) Q and reward, max Q
+
+* Check initialization values vs/and reward value ranges
+
+* Analyse Q table via 2/3D-PCA - any paths? (good if smooth edges between paths) or bad: isolated maxima/uniform patterns/jumps?. Maybe mark maxQ paths
+* Reward Normalization
+
+With DeepQ via NN:
+
+* replay buffer
+* Policy-gradient approaches

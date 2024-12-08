@@ -6,14 +6,14 @@ from rl_game.helpers import get_discrete_state
 
 LEARNING_RATE = 0.3
 DISCOUNT = 0.95
-EPISODES = 3000 #10000
+EPISODES = 2000 #10000
 START_SHOWING_FROM = 0 #1000
 SHOW_EVERY = 50
 LOAD_QTABLE = True
 
 # Exploration settings
 epsilon = 0.01#0.1  # not a constant, qoing to be decayed
-EPSILON_MIN = 0.001 #even when decay is over, leave some exploration if stuck in local minima
+EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration if stuck in local minima
 START_EPSILON_DECAYING = 1
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
@@ -50,7 +50,7 @@ for episode in range(EPISODES):
             render = True
     done = False
     # get initial state
-    discrete_state = get_discrete_state(environment.reset(), all_bins)
+    discrete_state = get_discrete_state(environment.reset(random_start = True), all_bins)
 
     while not done:
         # Get action: exploit or explore
@@ -91,5 +91,5 @@ for episode in range(EPISODES):
         epsilon -= epsilon_decay_value
     render = False
 # save Q-table
-#np.save("results/q_table.npy", q_table)
+np.save("results/q_table.npy", q_table)
 pygame.quit()
