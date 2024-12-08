@@ -4,6 +4,10 @@
 
 ### ToDO
 
+### Code:
+
+* `reward_list` to `reward_dict`, named, all other code dynamically
+
 * Reward map: Wall+pad penalty have to stay the same everywhere, separate reward maps for all components
 * Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
 * Reduce action space: Drop 0:None

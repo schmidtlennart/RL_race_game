@@ -18,7 +18,7 @@ MAX_REWARD = 80 #trophy reached
 MAX_PENALTY = -80 # collision
 # NO-GO zones to wall + pads
 BUFFER_RATIO = 2 #Safety distance to walls + obstacles, discrete drop in reward (buffered car = car size * BUFFER_RATIO)
-BUFFER_PENALTY = -5 #if exceeding safety buffer to walls + obstacles
+BUFFER_PENALTY = -10 #if exceeding safety buffer to walls + obstacles
 # Continous distance measures
 DISTANCE_PENALTY = -20 #if too close to walls or obstacles
 DISTANCE_CHECKPOINT_REWARD = 10 #the closer to checkpoint the better
@@ -89,8 +89,8 @@ class CarSprite(pygame.sprite.Sprite):
         self.direction %= 360  # needs remapping to [0,359] because can take any value
         # calculate new position
         rad = self.direction * math.pi / 180
-        self.position[0] += -self.speed * math.sin(rad)
-        self.position[1] += -self.speed * math.cos(rad)
+        self.position[0] += -self.speed * math.sin(rad)#x
+        self.position[1] += -self.speed * math.cos(rad)#y
         # update rect center
         self.rect.center = self.position.astype(int)
         # rotate image + rect accordingly
@@ -123,7 +123,7 @@ class Trophy(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.image.load(IMAGEPATH+'trophy.png')
         self.rect = self.image.get_rect()
-        self.rect.x, self.rect.y = position
+        self.rect.center = position
     def draw(self, screen):
         screen.blit(self.image, self.rect)
 
@@ -131,6 +131,7 @@ class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     # Screen definition (x,y): Top left: (0,0), Bottom right: (WINDOW_WIDTH,WINDOW_HEIGHT)
     def __init__(self):
+        # Parameters that might be changed from outside
         # whether to start at random position
         self.random_start = False
         self.initialize_environment()
@@ -155,7 +156,7 @@ class RaceEnv(gym.Env):
         self.checkpoint_counter = 0
         self.checkpoint_reward = 0
         # create trophy
-        self.trophy = Trophy((280,0))
+        self.trophy = Trophy((298,20))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
         start_position = (60, 710)
@@ -163,7 +164,7 @@ class RaceEnv(gym.Env):
             start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
         self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
-        # calculate whiskers
+        # calculate first whiskers
         self.calculate_whiskers()       
 
     def init_render(self):      
@@ -188,7 +189,7 @@ class RaceEnv(gym.Env):
         self.pad_group.draw(self.screen)
         self.trophy_group.draw(self.screen)
         self.checkpoint_group.draw(self.screen)
-        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (600, 730))
+        self.screen.blit(self.font.render(self.screenmessage, True, (0,255,0)), (580, 730))
         pygame.display.flip()
 
     def reset(self, random_start = False):
@@ -205,54 +206,61 @@ class RaceEnv(gym.Env):
         # return obsrevations etc. for training
         state = np.concatenate([self.distances, np.array([self.car.direction, self.car.speed])])
         return state       
-        
 
-    def calculate_reward(self):
-        # calculate the reward based on the current state
+    def check_win_loss(self):        
         # reward is -MAX_REWARD if collision
         # reward is MAX_REWARD if trophy is reached
         self.collisions = pygame.sprite.groupcollide(self.car_group, self.pad_group, False, False, collided = None)
         if self.collisions != {}:
             self.win_condition = False
-            #timer_text = font.render("Crash!", True, (255,0,0))
             self.car.image = pygame.image.load(IMAGEPATH+'collision.png')
-            #loss_text = win_font.render('Press Space to Retry', True, (255,0,0))
-            self.car.MAX_SPEED = 0
 
         trophy_collision = pygame.sprite.groupcollide(self.car_group, self.trophy_group, False, True)
         if trophy_collision != {}:
             self.win_condition = True
-            self.car.MAX_SPEED = 0
         
-        # make sure center of car didnt leave the screen
-        x_condition = self.car.rect.center[0] < 0 or self.car.rect.center[0] > WINDOW_WIDTH
-        y_condition = self.car.rect.center[1] < 0 or self.car.rect.center[1] > WINDOW_HEIGHT
+        # make sure center of car didnt leave the screen (+buffer)
+        x_condition = self.car.rect.center[0] < 15 or self.car.rect.center[0] > WINDOW_WIDTH-15
+        y_condition = self.car.rect.center[1] < 15 or self.car.rect.center[1] > WINDOW_HEIGHT-15
         if x_condition or y_condition:
             self.win_condition = False
-            self.car.MAX_SPEED = 0
-        # calculate dynamic reward
-        self.reward_func()
+        # if win or loss
+        if self.win_condition is not None:
+            win_loss_reward = [MAX_PENALTY,MAX_REWARD][int(self.win_condition)]
+            self.reward_list = [win_loss_reward]+[np.nan]*5 #if win or loss, other metrics dont matter any more (onyl relevant for debugging)
+            self.reward = win_loss_reward
 
-        # return done
-        return self.win_condition is not None
+        
+    def calculate_reward(self):
+        reward_list = []
+        # 6. WIN or LOSS: Overwrite reward if game lost or won
+        self.check_win_loss()
+        if self.win_condition is not None:
+            return
+        else:
+            reward_list.append(0)
 
-    def reward_func(self):
-        reward = []
         ### Buffer Zones around walls and pads
         # buffer around car
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
         
         ### 1. WALL BUFFER: if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
         if (buffered_car.left < 0) or (buffered_car.right > WINDOW_WIDTH) or (buffered_car.bottom > WINDOW_HEIGHT):
-            reward.append(BUFFER_PENALTY)
+            reward_list.append(BUFFER_PENALTY)
+        else:
+            reward_list.append(0)
+
         ### 2. PAD BUFFER if too close to pads
-        close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]
-        if np.any(close_miss_pad): reward.append(BUFFER_PENALTY)
+        close_miss_pad = [buffered_car.colliderect(pad.rect) for pad in self.pads]        
+        if np.any(close_miss_pad): 
+            reward_list.append(BUFFER_PENALTY)
+        else:
+            reward_list.append(0)
 
         ### 3. DISTANCE to both pads and walls
         distance_penalty = 1-np.array(self.distances)/(VIEW*1.1) #normalize by maximum view distance to [0,1]
         distance_penalty = np.sum(distance_penalty)*DISTANCE_PENALTY
-        reward.append(distance_penalty)
+        reward_list.append(distance_penalty)
  
         # ### distance to trophy
         # distance_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
@@ -266,7 +274,7 @@ class RaceEnv(gym.Env):
             self.checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
             if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
                     self.checkpoint_counter += 1
-        reward.append(self.checkpoint_reward)
+        reward_list.append(self.checkpoint_reward)
 
         ### 5. DISTANCE TO NEXT CHECKPOINT 
         distance_checkpoint = np.array(self.car.rect.center) - np.array(self.checkpoints[self.checkpoint_counter].rect.center)
@@ -274,16 +282,41 @@ class RaceEnv(gym.Env):
         distance_checkpoint_print = (np.abs(distance_checkpoint) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))
         # subtract from 1
         distance_checkpoint = (1-np.sum(distance_checkpoint_print))*DISTANCE_CHECKPOINT_REWARD
-        reward.append(distance_checkpoint)
+        reward_list.append(distance_checkpoint)
         
+        # add to reward list
+        self.reward_list = reward_list
         ### sum up all penalties
-        self.reward = sum(reward)
-
-        # Overwrite if fail or success
-        if self.win_condition is not None:
-            self.reward = [-MAX_REWARD, MAX_PENALTY][int(self.win_condition)]
+        self.reward = sum(reward_list)
         
-        self.screenmessage = f"Reward: {round(self.reward,1)} Min. Wall Distance: {round(distance_penalty,1)} Checkpoint Distance: {round(distance_checkpoint,1)}"
+        # update stats in screen message
+        self.screenmessage = f"Reward: {round(self.reward,1)} Wall Distance Penalty: {round(distance_penalty,1)} Checkpoint Distance: {round(distance_checkpoint,1)}"
+
+    def compute_reward_map(self):
+        reward_map = np.full((WINDOW_WIDTH, WINDOW_HEIGHT, 7), np.nan, dtype=np.float32)
+        
+        # Precompute pad collision masks
+        pad_masks = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT), dtype=bool)
+        for pad in self.pads:
+            pad_masks[pad.rect.left:pad.rect.right, pad.rect.top:pad.rect.bottom] = True
+
+        # Compute the reward map
+        for y in range(WINDOW_HEIGHT-1, -1,-1):
+            print(y)
+            for x in range(WINDOW_WIDTH):
+                self.win_condition = None
+                self.car.rect.center = (x, y)
+                
+                # Skip if center inside any of the pads
+                if pad_masks[x, y]:
+                    continue
+                
+                self.check_win_loss()
+                if self.win_condition is None:  # Only if not yet won or lost do expensive calculations
+                    self.calculate_whiskers()
+                    self.calculate_reward()  # Get total + individual rewards, reruns check_win_loss though
+                    reward_map[x, y, :] = [self.reward] + self.reward_list
+        return reward_map
 
     def calculate_whiskers(self):
         # whiskers to "see" surrounding objects if whiskers collide with them at a given distance
@@ -327,19 +360,6 @@ class RaceEnv(gym.Env):
         self.whisker_collisions = w_collisions
         self.distances = w_distances
 
-    def compute_reward_map(self):
-        reward_map = np.full((WINDOW_WIDTH, WINDOW_HEIGHT), np.nan)
-        # compute the reward map       
-        for y in range(WINDOW_HEIGHT-1, -1,-1):
-            print(y)
-            for x in range(0, WINDOW_WIDTH):
-                #print(x)
-                self.car.rect.center = (x,y)
-                # skip if center inside any of the pads
-                if not any([pad.rect.collidepoint(self.car.rect.center) for pad in self.pads]):                
-                    self.reward_func()
-                    reward_map[x,y] = self.reward
-        return(reward_map)
 
     def step(self, action):
         # perform one step in the game logic
@@ -350,12 +370,14 @@ class RaceEnv(gym.Env):
         # get state
         state = self.get_state()
         # check collision, calc reward
-        done = self.calculate_reward()
+        self.calculate_reward()
+
         # print win/loss message
-        if self.win_condition is not None:
-            self.screenmessage = ['You messed up', 'Finished!'][int(self.win_condition)]
+        done = self.win_condition is not None
+        if done:
+            self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)]
+            self.car.MAX_SPEED = 0
             while self.message_printed == False:
-                #print(self.screenmessage)
                 self.message_printed = True
         return state, self.reward, done
     

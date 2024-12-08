@@ -14,4 +14,5 @@ while run:
     new_state, reward, done = environment.step(action)
     # render current state
     environment.render()
+
 pygame.quit()
