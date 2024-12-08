@@ -46,27 +46,21 @@ def get_wall_collision(wall, whisker):
     # Unpack the points
     (x1, y1), (x2, y2) = wall
     (x3, y3), (x4, y4) = whisker
-
     # Calculate line coefficients
     A1 = y2 - y1
     B1 = x1 - x2
     C1 = A1 * x1 + B1 * y1
-
     A2 = y4 - y3
     B2 = x3 - x4
     C2 = A2 * x3 + B2 * y3
-
     # Set up the system of equations
     A = np.array([[A1, B1], [A2, B2]])
     B = np.array([C1, C2])
-
     # Check if the lines are parallel
     if np.linalg.det(A) == 0:
         return ()  # Lines are parallel and do not intersect
-
     # Solve the system of equations
     ix, iy = np.linalg.solve(A, B)
-
     # Check if the intersection point is within the x,y bounds of the whisker i.e. on it
     if min(x3, x4) <= ix <= max(x3, x4) and min(y3, y4) <= iy <= max(y3, y4):
         return ((ix, iy),())
@@ -75,33 +69,33 @@ def get_wall_collision(wall, whisker):
 class CarSprite(pygame.sprite.Sprite):
     def __init__(self, image, position):
         pygame.sprite.Sprite.__init__(self)
-        self.src_image = pygame.image.load(image) 
+        self.src_image = pygame.image.load(image)
         self.rect = self.src_image.get_rect()
         self.rect.center = position
+        self.position = np.array(position, dtype=float)  # Use a separate attribute for position
         self.speed = 0
         self.direction = 320
         self.MAX_SPEED = MAX_SPEED
 
     def update(self, action):
-        #SIMULATION
+        # SIMULATION
         # action[0]: acceleration -1:back, 1:forwards | action[1]: rotation, 1:left, -1:right
         # add acceleration to current speed
-        self.speed += action[0]*ACCELERATION
+        self.speed += action[0] * ACCELERATION
         if abs(self.speed) > self.MAX_SPEED:
             self.speed = self.MAX_SPEED if self.speed > 0 else -self.MAX_SPEED
         # add change of direction to current direction
-        self.direction += action[1]*TURN_ACCELERATION
-        self.direction %= 360 #needs remapping to [0,359] because can take any value
+        self.direction += action[1] * TURN_ACCELERATION
+        self.direction %= 360  # needs remapping to [0,359] because can take any value
         # calculate new position
-        x, y = (self.rect.center)
         rad = self.direction * math.pi / 180
-        x += -self.speed*math.sin(rad)
-        y += -self.speed*math.cos(rad)
-        position = (x, y)
+        self.position[0] += -self.speed * math.sin(rad)
+        self.position[1] += -self.speed * math.cos(rad)
+        # update rect center
+        self.rect.center = self.position.astype(int)
         # rotate image + rect accordingly
         self.image = pygame.transform.rotate(self.src_image, self.direction)
-        self.rect = self.image.get_rect()
-        self.rect.center = position
+        self.rect = self.image.get_rect(center=self.rect.center)
 
 class PadSprite(pygame.sprite.Sprite):
     def __init__(self, position, width, height=25):
