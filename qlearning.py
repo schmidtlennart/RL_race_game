@@ -6,30 +6,34 @@ from rl_game.helpers import get_discrete_state
 
 LEARNING_RATE = 0.3
 DISCOUNT = 0.95
-EPISODES = 10000
-START_SHOWING_FROM = 1000
-SHOW_EVERY = 100
+EPISODES = 3000 #10000
+START_SHOWING_FROM = 0 #1000
+SHOW_EVERY = 50
+LOAD_QTABLE = True
 
 # Exploration settings
-epsilon = 0.95  # not a constant, qoing to be decayed
-EPSILON_MIN = 0.03 #even when decay is over, leave some exploration if stuck in local minima
+epsilon = 0.01#0.1  # not a constant, qoing to be decayed
+EPSILON_MIN = 0.001 #even when decay is over, leave some exploration if stuck in local minima
 START_EPSILON_DECAYING = 1
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 
-### create bins of continous states for the Q-table
+### STATES & ACTIONS: create bins of continous states for the Q-table
 # distances of 8 whiskers
 distances_bins = [np.linspace(0, VIEW, 4)]*8 #ideally : 30
-
 direction_bins = np.linspace(0, 359, 36)
 speed_bins = np.linspace(-MAX_SPEED, MAX_SPEED, 6) #ideally: 20
 all_bins = distances_bins + [direction_bins] + [speed_bins]
-
 # action space
-actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward, 3: left, 4: right
+actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
+
 # initialize Q-table
-table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
-q_table = np.random.uniform(low=-0.5, high=0, size= table_size)
+if LOAD_QTABLE:
+    print("LOADING Q-TABLE")
+    q_table = np.load("results/q_table.npy")
+else:
+    table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
+    q_table = np.random.uniform(low=-0.5, high=0, size= table_size)
 
 
 ### QLEARNING LOOP
@@ -41,8 +45,8 @@ render = False
 
 for episode in range(EPISODES):
     if (episode % SHOW_EVERY == 0):#only plot every n episodes after initial episodes are over
-        print(f"Episode: {episode}, epsilon: {epsilon}")
-        if episode > START_SHOWING_FROM:
+        print(f"Episode: {episode}, epsilon: {round(epsilon,5)}")
+        if episode >= START_SHOWING_FROM:
             render = True
     done = False
     # get initial state
@@ -87,5 +91,5 @@ for episode in range(EPISODES):
         epsilon -= epsilon_decay_value
     render = False
 # save Q-table
-np.save("results/q_table.npy", q_table)
+#np.save("results/q_table.npy", q_table)
 pygame.quit()

@@ -1,7 +1,10 @@
 ### ToDO
 
+# remove "None" action as its arbitrary (?), but explicit forward/backward
+# distance to checkpoint stronger
 # check initilalization vs reward changes
 # Analysis: record Qvalues/path/ final location as in highest y
+
 
 import pygame, math
 import numpy as np
@@ -19,7 +22,7 @@ WALLS = [
 IMAGEPATH = 'Race_Game/images/'
 
 ### Reward Parameters
-MAX_REWARD = 40 #trophy reached
+MAX_REWARD = 80 #trophy reached
 CHECKPOINT_REWARD = MAX_REWARD/8 #checkpoint reached
 MAX_PENALTY = -80 # collision
 BUFFER_RATIO = 2 #Safety distance to walls + obstacles, discrete drop in reward (buffered car = car size * BUFFER_RATIO)
@@ -266,7 +269,7 @@ class RaceEnv(gym.Env):
         # normalize by screen width, height, i.e. between 0 and 1 
         distance_checkpoint_print = (np.abs(distance_checkpoint) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))
         # subtract from 1
-        distance_checkpoint = 1-np.sum(distance_checkpoint_print)
+        distance_checkpoint = (1-np.sum(distance_checkpoint_print))*5
         reward.append(distance_checkpoint)
         ### sum up all penalties
         self.reward = sum(reward)
