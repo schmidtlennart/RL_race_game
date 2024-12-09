@@ -98,6 +98,7 @@ for episode in range(EPISODES):
         R.append(reward)
         steps += 1
 
+
     # Decaying is being done every episode if episode number is within decaying range
     if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
         epsilon -= epsilon_decay_value

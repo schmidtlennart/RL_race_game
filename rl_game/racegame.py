@@ -161,7 +161,9 @@ class RaceEnv(gym.Env):
         # create car
         start_position = (60, 710)
         if self.random_start:
-            start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
+            #start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
+            #add delta
+            start_position = start_position + np.random.randint(-5,5,2)
         self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
         # calculate first whiskers
