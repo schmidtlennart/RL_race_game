@@ -8,7 +8,7 @@ import sys
 
 LEARNING_RATE = 0.2
 DISCOUNT = 0.95
-EPISODES = 10000 #10000
+EPISODES = 10#000 #10000
 START_SHOWING_FROM = 1000 #1000
 SHOW_EVERY = 50
 LOAD_QTABLE = sys.argv[1] == "load"
@@ -112,4 +112,4 @@ np.save("results/q_table.npy", q_table)
 pygame.quit()
 
 # save log as pd df
-pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather", index=False)
+pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")

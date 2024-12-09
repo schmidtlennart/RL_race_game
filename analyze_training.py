@@ -3,13 +3,8 @@ import numpy as np
 import pandas as pd
 
 outpath = "images/logging.png"
-# Load the logging array
-logging_arr = np.load('results/logging.npy')
 
-
-# Convert the logging array to a pandas DataFrame
-logging_df = pd.DataFrame(logging_arr, columns=logging_cols)
-
+logging_df = pd.read_feather("results/logging.feather")
 # Create subplots
 fig, axs = plt.subplots(4, 1, figsize=(10, 12.5))
 
