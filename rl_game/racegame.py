@@ -20,10 +20,10 @@ MAX_PENALTY = -80 # collision
 BUFFER_RATIO = 2 #Safety distance to walls + obstacles, discrete drop in reward (buffered car = car size * BUFFER_RATIO)
 BUFFER_PENALTY = -10 #if exceeding safety buffer to walls + obstacles
 # Continous distance measures
-DISTANCE_PENALTY = -20 #if too close to walls or obstacles
-DISTANCE_CHECKPOINT_REWARD = 10 #the closer to checkpoint the better
+DISTANCE_PENALTY = -18 #if too close to walls or obstacles
+DISTANCE_CHECKPOINT_REWARD = 8 #the closer to checkpoint the better
 # Add reward for reaching checkpoints
-CHECKPOINT_REWARD = MAX_REWARD/8 #checkpoint reached
+CHECKPOINT_REWARD = MAX_REWARD/6 #checkpoint reached
 
 # Car Parameters
 MAX_SPEED = 8
@@ -301,21 +301,22 @@ class RaceEnv(gym.Env):
             pad_masks[pad.rect.left:pad.rect.right, pad.rect.top:pad.rect.bottom] = True
 
         # Compute the reward map
-        for y in range(WINDOW_HEIGHT-1, -1,-1):
-            print(y)
+        for y in range(WINDOW_HEIGHT-1, -1,-1): #-1
+            if y % 50 == 0:
+                print(y)
             for x in range(WINDOW_WIDTH):
                 self.win_condition = None
                 self.car.rect.center = (x, y)
                 
                 # Skip if center inside any of the pads
                 if pad_masks[x, y]:
-                    continue
-                
-                self.check_win_loss()
+                    continue                
+                self.check_win_loss()#calculates win/loss directly
                 if self.win_condition is None:  # Only if not yet won or lost do expensive calculations
                     self.calculate_whiskers()
                     self.calculate_reward()  # Get total + individual rewards, reruns check_win_loss though
-                    reward_map[x, y, :] = [self.reward] + self.reward_list
+                reward_map[x, y, :] = [self.reward] + self.reward_list
+
         return reward_map
 
     def calculate_whiskers(self):
