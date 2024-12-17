@@ -2,24 +2,24 @@
 import numpy as np
 import pandas as pd
 import pygame
-from rl_game.racegame import RaceEnv, MAX_SPEED, ACCELERATION, TURN_ACCELERATION,VIEW
+from rl_game.racegame import RaceEnv, MAX_SPEED, MIN_SPEED, ACCELERATION, TURN_ACCELERATION,VIEW
 from rl_game.helpers import get_discrete_state
 import sys
 
 ### Script / Visualization Settings
 LOAD_QTABLE = "load" in sys.argv
 SAVE_QTABLE = "save" in sys.argv
-START_SHOWING_FROM = 0 #1000
+START_SHOWING_FROM = 400 #1000
 SHOW_EVERY = 10
 
 ### Training settings
 LEARNING_RATE = 0.6
 DISCOUNT = 0.95
 EPISODES = 4000#000 #10000
-START_RANDOM_STARTING_FROM = 0#1500
+START_RANDOM_STARTING_FROM = 200#1500
 
 ### Exploration settings
-epsilon = 0.01#0.05  # not a constant, qoing to be decayed
+epsilon = 0.01 # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 1000
 END_EPSILON_DECAYING = EPISODES//2
@@ -27,21 +27,22 @@ epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILO
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
 # distances of 8 whiskers
-distances_bins = [np.linspace(0, VIEW, 4)]*8 #ideally : 30
+distances_bins = [np.linspace(0, VIEW, 4)]*8
 # for direciton and speed, needs to be designed such that each action ends up in a new bin
 direction_bins = np.linspace(0, 360, int(360/TURN_ACCELERATION+1))
-speed_bins = np.linspace(-MAX_SPEED, MAX_SPEED, int(2*MAX_SPEED/ACCELERATION+1)) #ideally: 20
+speed_bins = np.linspace(MIN_SPEED, MAX_SPEED, int((abs(MIN_SPEED)+MAX_SPEED)/ACCELERATION+1)) #ideally: 20
 all_bins = distances_bins + [direction_bins] + [speed_bins]
 # action space
 # Game controls: 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
-# For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn (but can still reach speed 0)
+# For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
 actions = [(1,0), (-1,0), (0,1), (0,-1)]
 
-# initialize Q-table
+### INITIALIZE Q-TABLE
 if LOAD_QTABLE:
     print("LOADING Q-TABLE")
     q_table = np.load("results/q_table.npy")
 else:
+    # Q-table: state space x action space
     table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
     q_table = np.random.uniform(low=-6.5, high=-5.5, size= table_size)
 
@@ -60,6 +61,8 @@ render = False
 random_start = False # Only start at random position after n episodes
 logging_cols = ["Episode", "Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 logging_arr = np.full((EPISODES, len(logging_cols)), np.nan)
+
+# Q-learning loop
 for episode in range(EPISODES):
     if (episode % SHOW_EVERY == 0):#only plot every n episodes after initial episodes are over
         print(f"Episode: {episode}, epsilon: {round(epsilon,5)}")
@@ -67,6 +70,7 @@ for episode in range(EPISODES):
             render = True
     random_start = episode >= START_RANDOM_STARTING_FROM
     done = False
+    checkpoint_reached = False
     steps = 0
     Q = []
     R = []
@@ -82,7 +86,8 @@ for episode in range(EPISODES):
             # Explore: Get random action
             action = np.random.randint(0, len(actions))
         # perform
-        new_state, reward, done = environment.step(actions[action])
+        new_state, reward, done, checkpoint_reached = environment.step(actions[action])
+        print("Checkpoint reached!") if checkpoint_reached else None
         new_discrete_state = get_discrete_state(new_state, all_bins)
         #print(f"New state: {new_state}")
         #print(f"New state discrete: {new_discrete_state}")
@@ -91,17 +96,16 @@ for episode in range(EPISODES):
             environment.render()
 
         ### UPDATE Q TABLE
-        # Intuition: Update current Q value with the maximum Q value that could be reached after the action
-        # Maximum possible Q value in next step (for new state)
-        max_future_q = np.max(q_table[new_discrete_state])
-
-        # Current Q value (for current state and performed action)
-        current_q = q_table[discrete_state + (action,)]
-
-        if done:
-            # If we're at the end of the episode, we put reward directly as max Q value
+        # check if episode is over or checkpoint reached. If so, set Q directly to reward
+        if done or checkpoint_reached:
             new_q = reward
         else:
+            # Intuition: Update current Q value with the maximum Q value that could be reached after the action
+            # Maximum possible Q value in next step (for new state)
+            max_future_q = np.max(q_table[new_discrete_state])
+
+            # Current Q value (for current state and performed action)
+            current_q = q_table[discrete_state + (action,)]
             # And here's our equation for a new Q value for current state and action
             new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
 

@@ -1,134 +1,10 @@
-import pygame, math
+import pygame
 import numpy as np
 from pygame.locals import *
 import gym
-
-IMAGEPATH = 'Race_Game/images/'
-WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
-WALLS = [
-    ((0, 0), (0, WINDOW_HEIGHT)),          # Left wall
-    ((0, 0), (WINDOW_WIDTH, 0)),           # Top wall
-    ((WINDOW_WIDTH, 0), (WINDOW_WIDTH, WINDOW_HEIGHT)),  # Right wall
-    ((0, WINDOW_HEIGHT), (WINDOW_WIDTH, WINDOW_HEIGHT))  # Bottom wall
-]
-
-### Reward Parameters
-# Win/loss conditions (overwrite all else)
-MAX_REWARD = 80 #trophy reached
-MAX_PENALTY = -80 # collision
-# NO-GO zones to wall + pads
-BUFFER_RATIO = 2 #Safety distance to walls + obstacles, discrete drop in reward (buffered car = car size * BUFFER_RATIO)
-BUFFER_PENALTY = -10 #if exceeding safety buffer to walls + obstacles
-# Continous distance measures
-DISTANCE_PENALTY = -18 #if too close to walls or obstacles
-DISTANCE_CHECKPOINT_REWARD = 8 #the closer to checkpoint the better
-# Add reward for reaching checkpoints
-CHECKPOINT_REWARD = MAX_REWARD/6 #checkpoint reached
-
-# Car Parameters
-MAX_SPEED = 8
-ACCELERATION = 4
-TURN_ACCELERATION = 15 #in degrees
-VIEW = 80 #viewing distance of driver in 8 whisker directions
-    
-### Helper functions: How to put into separate file?
-# Function to scale the car rectangle by ratio for near miss calculation
-def scale_rect(rect, ratio):
-    new_width = rect.width * ratio
-    new_height = rect.height * ratio
-    new_rect = rect.copy()
-    new_rect.width = new_width
-    new_rect.height = new_height
-    new_rect.center = rect.center  # Keep the center the same
-    return new_rect
-    
-def get_wall_collision(wall, whisker):
-    # Unpack the points
-    (x1, y1), (x2, y2) = wall
-    (x3, y3), (x4, y4) = whisker
-    # Calculate line coefficients
-    A1 = y2 - y1
-    B1 = x1 - x2
-    C1 = A1 * x1 + B1 * y1
-    A2 = y4 - y3
-    B2 = x3 - x4
-    C2 = A2 * x3 + B2 * y3
-    # Set up the system of equations
-    A = np.array([[A1, B1], [A2, B2]])
-    B = np.array([C1, C2])
-    # Check if the lines are parallel
-    if np.linalg.det(A) == 0:
-        return ()  # Lines are parallel and do not intersect
-    # Solve the system of equations
-    ix, iy = np.linalg.solve(A, B)
-    # Check if the intersection point is within the x,y bounds of the whisker i.e. on it
-    if min(x3, x4) <= ix <= max(x3, x4) and min(y3, y4) <= iy <= max(y3, y4):
-        return ((ix, iy),())
-    else:
-        return ()  # Intersection point is not within the bounds of both line segments
-class CarSprite(pygame.sprite.Sprite):
-    def __init__(self, image, position):
-        pygame.sprite.Sprite.__init__(self)
-        self.src_image = pygame.image.load(image)
-        self.rect = self.src_image.get_rect()
-        self.rect.center = position
-        self.position = np.array(position, dtype=float)  # Use a separate attribute for position
-        self.speed = 0
-        self.direction = 320
-        self.MAX_SPEED = MAX_SPEED
-        self.ACCELERATION = ACCELERATION
-        self.TURN_ACCELERATION = TURN_ACCELERATION
-
-    def update(self, action):
-        # SIMULATION
-        # action[0]: acceleration -1:back, 0:none, 1:forwards | action[1]: rotation, 1:left, -1:right
-        # add acceleration to current speed
-        self.speed += action[0] * self.ACCELERATION
-        if abs(self.speed) > self.MAX_SPEED:
-            self.speed = self.MAX_SPEED if self.speed > 0 else -self.MAX_SPEED
-        # add change of direction to current direction
-        self.direction += action[1] * self.TURN_ACCELERATION
-        self.direction %= 360  # needs remapping to [0,359] because can take any value
-        # calculate new position
-        rad = self.direction * math.pi / 180
-        self.position[0] += -self.speed * math.sin(rad)#x
-        self.position[1] += -self.speed * math.cos(rad)#y
-        # update rect center
-        self.rect.center = self.position.astype(int)
-        # rotate image + rect accordingly
-        self.image = pygame.transform.rotate(self.src_image, self.direction)
-        self.rect = self.image.get_rect(center=self.rect.center)
-
-class PadSprite(pygame.sprite.Sprite):
-    def __init__(self, position, width, height=25):
-        super(PadSprite, self).__init__()
-        self.image = pygame.Surface((width, height))
-        self.image.fill((128, 128, 128))  # Fill the pad with a color (red in this case)
-        self.rect = self.image.get_rect()
-        self.rect.center = position
-class CheckpointSprite(pygame.sprite.Sprite):
-    def __init__(self, position, width=150, height=25):
-        super(CheckpointSprite, self).__init__()
-        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
-        self.image.fill((255, 204, 203, 255))  # Fill with white color and set transparency
-
-        # Create a dotted pattern
-        dot_spacing = 5
-        for x in range(0, width, dot_spacing):
-            for y in range(0, height, dot_spacing):
-                self.image.set_at((x, y), (0, 0, 0, 0))  # Set dots to be fully transparent
-        self.rect = self.image.get_rect()
-        self.rect.center = position
-
-class Trophy(pygame.sprite.Sprite):
-    def __init__(self, position):
-        pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.image.load(IMAGEPATH+'trophy.png')
-        self.rect = self.image.get_rect()
-        self.rect.center = position
-    def draw(self, screen):
-        screen.blit(self.image, self.rect)
-
+from rl_game.game_elements import CarSprite, PadSprite, CheckpointSprite, Trophy
+from rl_game.game_helpers import get_wall_collision, scale_rect
+from rl_game.game_config import *
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     # Screen definition (x,y): Top left: (0,0), Bottom right: (WINDOW_WIDTH,WINDOW_HEIGHT)
@@ -139,8 +15,6 @@ class RaceEnv(gym.Env):
         self.initialize_environment()
 
     def initialize_environment(self):
-        # win/fail message in terminal
-        self.message_printed = False
         # initialize pygame
         pygame.init()
         # set fps timer
@@ -273,13 +147,24 @@ class RaceEnv(gym.Env):
         # distance_trophy = round(1/(np.sum(distance_trophy / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))),1)
         # #reward.append(distance_trophy)
 
-        ### 4. CHECKPOINT REACHED if checkpoint n is reached, add constant to reward from there on
+        ### 4. CHECKPOINT REACHED
+        # if checkpoint n is reached, overwrite Q directly with reward and add constant to reward from there on
+        self.checkpoint_reached = False
         if self.checkpoints[self.checkpoint_counter].rect.collidepoint(self.car.rect.center):
             self.checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
+            # remove checkpoint from to make sure each checkpoint is only counted once
+            self.checkpoints[self.checkpoint_counter].rect.center = (-100,-100)
             if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
                     self.checkpoint_counter += 1
+            # set reward to checkpoint reward and 
+            self.reward = self.checkpoint_reward
+            self.reward_list = [np.nan] *3 + [self.checkpoint_reward]+[np.nan]
+            self.checkpoint_reached = True
+            self.screenmessage = f"Checkpoint reached! Reward: {round(self.reward,1)}"
+            return
+        # if not reached simply continue adding constant for having made above checkpoint n    
         reward_list.append(self.checkpoint_reward)
-
+        
         ### 5. DISTANCE TO NEXT CHECKPOINT 
         distance_checkpoint = np.array(self.car.rect.center) - np.array(self.checkpoints[self.checkpoint_counter].rect.center)
         # normalize by screen width, height, i.e. between 0 and 1 
@@ -309,7 +194,8 @@ class RaceEnv(gym.Env):
             if y % 50 == 0:
                 print(y)
             for x in range(WINDOW_WIDTH):
-                self.win_condition = None
+                self.initialize_environment()
+                #self.win_condition = None
                 self.car.rect.center = (x, y)
                 
                 # Skip if center inside any of the pads
@@ -382,9 +268,7 @@ class RaceEnv(gym.Env):
         if done:
             self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)] + f" - Reward: {round(self.reward,1)}"
             self.car.MAX_SPEED = 0
-            while self.message_printed == False:
-                self.message_printed = True
-        return state, self.reward, done
+        return state, self.reward, done, self.checkpoint_reached
     
     def pressed_to_action(self):
         # translate keyboard keys to exit/restart or game action    
