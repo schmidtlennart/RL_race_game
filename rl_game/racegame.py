@@ -81,7 +81,7 @@ class CarSprite(pygame.sprite.Sprite):
 
     def update(self, action):
         # SIMULATION
-        # action[0]: acceleration -1:back, 1:forwards | action[1]: rotation, 1:left, -1:right
+        # action[0]: acceleration -1:back, 0:none, 1:forwards | action[1]: rotation, 1:left, -1:right
         # add acceleration to current speed
         self.speed += action[0] * self.ACCELERATION
         if abs(self.speed) > self.MAX_SPEED:
@@ -161,11 +161,11 @@ class RaceEnv(gym.Env):
         self.trophy = Trophy((298,20))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
         # create car
-        start_position = (60, 710)
+        start_position = (50, 680)
         if self.random_start:
             #start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
             #add delta
-            start_position = (start_position[0] + np.random.randint(-20,200),start_position[1] + np.random.randint(-20,200))
+            start_position = (start_position[0] + np.random.randint(0,900),start_position[1] + np.random.randint(-20,20))
         self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
         # calculate first whiskers
@@ -249,7 +249,7 @@ class RaceEnv(gym.Env):
         buffered_car = scale_rect(self.car.rect, BUFFER_RATIO)
         
         ### 1. WALL BUFFER: if too close to to screen (left/right/bottom), buffer penalty if too close, 0 if not
-        if (buffered_car.left < 0) or (buffered_car.right > WINDOW_WIDTH) or (buffered_car.bottom > WINDOW_HEIGHT):
+        if (buffered_car.left < 15) or (buffered_car.right > (WINDOW_WIDTH-15)) or (buffered_car.bottom > (WINDOW_HEIGHT-15)):
             reward_list.append(BUFFER_PENALTY)
         else:
             reward_list.append(0)
@@ -380,7 +380,7 @@ class RaceEnv(gym.Env):
         # print win/loss message
         done = self.win_condition is not None
         if done:
-            self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)] + f" Reward: {round(self.reward,1)}"
+            self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)] + f" - Reward: {round(self.reward,1)}"
             self.car.MAX_SPEED = 0
             while self.message_printed == False:
                 self.message_printed = True

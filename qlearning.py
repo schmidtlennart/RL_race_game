@@ -6,20 +6,22 @@ from rl_game.racegame import RaceEnv, MAX_SPEED, ACCELERATION, TURN_ACCELERATION
 from rl_game.helpers import get_discrete_state
 import sys
 
+### Script / Visualization Settings
+LOAD_QTABLE = "load" in sys.argv
+SAVE_QTABLE = "save" in sys.argv
+START_SHOWING_FROM = 0 #1000
+SHOW_EVERY = 10
 
-### Learning / Visualisation settings
+### Training settings
 LEARNING_RATE = 0.6
 DISCOUNT = 0.95
-EPISODES = 2000#000 #10000
-START_RANDOM_STARTING_FROM = 1500
-START_SHOWING_FROM = 0 #1000
-SHOW_EVERY = 50
-LOAD_QTABLE = sys.argv[1] == "load"
+EPISODES = 4000#000 #10000
+START_RANDOM_STARTING_FROM = 0#1500
 
 ### Exploration settings
-epsilon = 0.005#0.1  # not a constant, qoing to be decayed
+epsilon = 0.01#0.05  # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
-START_EPSILON_DECAYING = 200
+START_EPSILON_DECAYING = 1000
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 
@@ -31,7 +33,9 @@ direction_bins = np.linspace(0, 360, int(360/TURN_ACCELERATION+1))
 speed_bins = np.linspace(-MAX_SPEED, MAX_SPEED, int(2*MAX_SPEED/ACCELERATION+1)) #ideally: 20
 all_bins = distances_bins + [direction_bins] + [speed_bins]
 # action space
-actions = [(0,0),(1,0), (-1,0), (0,1), (0,-1)]  # 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
+# Game controls: 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
+# For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn (but can still reach speed 0)
+actions = [(1,0), (-1,0), (0,1), (0,-1)]
 
 # initialize Q-table
 if LOAD_QTABLE:
@@ -54,9 +58,8 @@ environment = RaceEnv()
 environment.init_render()
 render = False
 random_start = False # Only start at random position after n episodes
-logging_cols = ["Episode", "Epsilon", "Steps,", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
+logging_cols = ["Episode", "Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 logging_arr = np.full((EPISODES, len(logging_cols)), np.nan)
-
 for episode in range(EPISODES):
     if (episode % SHOW_EVERY == 0):#only plot every n episodes after initial episodes are over
         print(f"Episode: {episode}, epsilon: {round(epsilon,5)}")
@@ -96,12 +99,11 @@ for episode in range(EPISODES):
         current_q = q_table[discrete_state + (action,)]
 
         if done:
-            # If we're at the end of the episode, there is no future max Q value
+            # If we're at the end of the episode, we put reward directly as max Q value
             new_q = reward
-            break
-
-        # And here's our equation for a new Q value for current state and action
-        new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
+        else:
+            # And here's our equation for a new Q value for current state and action
+            new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
 
         # Update Q table with new Q value
         q_table[discrete_state + (action,)] = new_q
@@ -119,16 +121,16 @@ for episode in range(EPISODES):
         epsilon -= epsilon_decay_value
     render = False
     # log
-    logging_arr[episode, :] = [episode, steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
+    logging_arr[episode, :] = [episode,steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
 
     # every 100 episodes, save q_table + results
-    if episode % 100 == 0:
+    if episode % 100 == 0 and SAVE_QTABLE:
         np.save("results/q_table.npy", q_table)
         pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")
 
-# save final Q-table
-np.save("results/q_table.npy", q_table)
-pygame.quit()
+if SAVE_QTABLE:
+    # save final Q-table and logging
+    np.save("results/q_table.npy", q_table)
+    pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")
 
-# save log as pd df
-pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")
+pygame.quit()

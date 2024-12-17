@@ -9,6 +9,8 @@
 Prio 1:
 
 * smoothen out distance penalty
+* set minimum speed
+* change levels: higher reward once and from there on its the same game
 
 * `reward_list` to `reward_dict`, named, all other code dynamically
 * Walls as invisible pads
