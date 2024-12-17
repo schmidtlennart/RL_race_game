@@ -9,8 +9,7 @@
 Prio 1:
 
 * smoothen out distance penalty
-* set minimum speed
-* change levels: higher reward once and from there on its the same game
+* append logging if loaded
 * Walls as invisible pads
 * add orientation (y position, dist to checkpoint...) to state (?)
 

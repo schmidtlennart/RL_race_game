@@ -9,19 +9,19 @@ import sys
 ### Script / Visualization Settings
 LOAD_QTABLE = "load" in sys.argv
 SAVE_QTABLE = "save" in sys.argv
-START_SHOWING_FROM = 400 #1000
+START_SHOWING_FROM = 0 #400
 SHOW_EVERY = 10
 
 ### Training settings
-LEARNING_RATE = 0.6
+LEARNING_RATE = 0.5
 DISCOUNT = 0.95
-EPISODES = 4000#000 #10000
-START_RANDOM_STARTING_FROM = 200#1500
+EPISODES = 2000#000 #10000
+START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.01 # not a constant, qoing to be decayed
+epsilon = 0.5 # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
-START_EPSILON_DECAYING = 1000
+START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 
@@ -37,14 +37,19 @@ all_bins = distances_bins + [direction_bins] + [speed_bins]
 # For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
 actions = [(1,0), (-1,0), (0,1), (0,-1)]
 
+logging_cols = ["Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 ### INITIALIZE Q-TABLE
 if LOAD_QTABLE:
     print("LOADING Q-TABLE")
     q_table = np.load("results/q_table.npy")
+    logging_arr = pd.read_feather("results/logging.feather").values
 else:
     # Q-table: state space x action space
     table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
     q_table = np.random.uniform(low=-6.5, high=-5.5, size= table_size)
+    # logging
+    logging_arr = np.array(len(logging_cols))
+
 
 # n cells: 
 print(f"Q-table size: {q_table.shape}")
@@ -59,8 +64,6 @@ environment = RaceEnv()
 environment.init_render()
 render = False
 random_start = False # Only start at random position after n episodes
-logging_cols = ["Episode", "Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
-logging_arr = np.full((EPISODES, len(logging_cols)), np.nan)
 
 # Q-learning loop
 for episode in range(EPISODES):
@@ -124,8 +127,8 @@ for episode in range(EPISODES):
     if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
         epsilon -= epsilon_decay_value
     render = False
-    # log
-    logging_arr[episode, :] = [episode,steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
+    episode_log = [steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
+    np.concatenate([logging_arr, episode_log])
 
     # every 100 episodes, save q_table + results
     if episode % 100 == 0 and SAVE_QTABLE:
