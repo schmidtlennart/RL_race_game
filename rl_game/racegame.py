@@ -27,8 +27,8 @@ CHECKPOINT_REWARD = MAX_REWARD/6 #checkpoint reached
 
 # Car Parameters
 MAX_SPEED = 8
-ACCELERATION = 0.5
-TURN_ACCELERATION = 5
+ACCELERATION = 4
+TURN_ACCELERATION = 15 #in degrees
 VIEW = 80 #viewing distance of driver in 8 whisker directions
     
 ### Helper functions: How to put into separate file?
@@ -76,16 +76,18 @@ class CarSprite(pygame.sprite.Sprite):
         self.speed = 0
         self.direction = 320
         self.MAX_SPEED = MAX_SPEED
+        self.ACCELERATION = ACCELERATION
+        self.TURN_ACCELERATION = TURN_ACCELERATION
 
     def update(self, action):
         # SIMULATION
         # action[0]: acceleration -1:back, 1:forwards | action[1]: rotation, 1:left, -1:right
         # add acceleration to current speed
-        self.speed += action[0] * ACCELERATION
+        self.speed += action[0] * self.ACCELERATION
         if abs(self.speed) > self.MAX_SPEED:
             self.speed = self.MAX_SPEED if self.speed > 0 else -self.MAX_SPEED
         # add change of direction to current direction
-        self.direction += action[1] * TURN_ACCELERATION
+        self.direction += action[1] * self.TURN_ACCELERATION
         self.direction %= 360  # needs remapping to [0,359] because can take any value
         # calculate new position
         rad = self.direction * math.pi / 180
@@ -163,7 +165,7 @@ class RaceEnv(gym.Env):
         if self.random_start:
             #start_position = (np.random.randint(50, WINDOW_WIDTH-50), np.random.randint(WINDOW_HEIGHT-100, WINDOW_HEIGHT-50))
             #add delta
-            start_position = start_position + np.random.randint(-5,5,2)
+            start_position = (start_position[0] + np.random.randint(-20,200),start_position[1] + np.random.randint(-20,200))
         self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
         # calculate first whiskers
@@ -229,7 +231,7 @@ class RaceEnv(gym.Env):
         # if win or loss
         if self.win_condition is not None:
             win_loss_reward = [MAX_PENALTY,MAX_REWARD][int(self.win_condition)]
-            self.reward_list = [win_loss_reward]+[np.nan]*5 #if win or loss, other metrics dont matter any more (onyl relevant for debugging)
+            self.reward_list = [win_loss_reward]+[np.nan]*5 #if win or loss, other metrics dont matter any more (only relevant for debugging)
             self.reward = win_loss_reward
 
         
@@ -261,7 +263,7 @@ class RaceEnv(gym.Env):
 
         ### 3. DISTANCE to both pads and walls
         distance_penalty = 1-np.array(self.distances)/(VIEW*1.1) #normalize by maximum view distance to [0,1]
-        distance_penalty = np.sum(distance_penalty)*DISTANCE_PENALTY
+        distance_penalty = np.sum(distance_penalty)*DISTANCE_PENALTY #alternatively: max = only respect closest object
         reward_list.append(distance_penalty)
  
         # ### distance to trophy
@@ -378,7 +380,7 @@ class RaceEnv(gym.Env):
         # print win/loss message
         done = self.win_condition is not None
         if done:
-            self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)]
+            self.screenmessage = ['You messed up. Press Space to retry', 'Finished! Press Space to retry'][int(self.win_condition)] + f" Reward: {round(self.reward,1)}"
             self.car.MAX_SPEED = 0
             while self.message_printed == False:
                 self.message_printed = True

@@ -1,6 +1,9 @@
 from rl_game.racegame import RaceEnv
 
 environment = RaceEnv()
+# smoother controls
+environment.car.ACCELERATION = 0.5
+environment.car.TURN_ACCELERATION = 5
 environment.init_render()
 run = True
 

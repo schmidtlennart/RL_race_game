@@ -2,4 +2,5 @@
 .python_version
 __pycache__
 */__pycache__/*
-results/
+results/*
+images/*
