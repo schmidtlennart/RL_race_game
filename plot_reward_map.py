@@ -2,8 +2,7 @@ import numpy as np
 import pygame
 from rl_game.racegame import RaceEnv, WINDOW_HEIGHT, WINDOW_WIDTH
 import matplotlib.pyplot as plt
-
-INDIVIDUAL_REWARDS = ["Win/Loss", "Wall/Pad Buffer", "Distance to Wall/Pad", "Checkpoint Level", "Distance to Checkpoint"]
+from rl_game.game_config import INDIVIDUAL_REWARDS
 
 environment = RaceEnv()
 initial_car_position = environment.car.rect.center

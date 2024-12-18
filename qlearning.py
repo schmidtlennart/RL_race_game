@@ -46,7 +46,7 @@ if LOAD_QTABLE:
 else:
     # Q-table: state space x action space
     table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
-    q_table = np.random.uniform(low=-6.5, high=-5.5, size= table_size)
+    q_table = np.random.uniform(low=-5, high=5, size= table_size)
     # logging
     logging_arr = np.array(len(logging_cols))
 
