@@ -9,7 +9,7 @@
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}", // so that debugger starts in workspace cwd
             "env": { "PYTHONPATH": "${workspaceRoot}"}, // has to be added somehow for debugger find custom modules inside workspace folder
-            "args": ["load"] // Add your CLI arguments here
+            "args": [] // Add your CLI arguments here
         }
     ]
 }

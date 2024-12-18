@@ -2,7 +2,7 @@ IMAGEPATH = 'Race_Game/images/'
 WINDOW_WIDTH, WINDOW_HEIGHT = 1020, 770#1024, 768
 ### Reward Parameters
 # list of all individual reward maps that are summed for final reward value
-INDIVIDUAL_REWARDS = ["Win/Loss", "Wall/Pad Buffer", "Distance to Wall/Pad", "Checkpoint Level", "Distance to Checkpoint"]
+INDIVIDUAL_REWARDS = ["Win/Loss", "Wall/Pad Buffer", "Checkpoint Level", "Distance to Checkpoint"]#"Distance to Wall/Pad", 
 # Win/loss conditions (overwrite all else)
 MAX_REWARD = 80 #trophy reached
 MAX_PENALTY = -80 # collision

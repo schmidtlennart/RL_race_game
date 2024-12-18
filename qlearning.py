@@ -3,35 +3,35 @@ import numpy as np
 import pandas as pd
 import pygame
 from rl_game.racegame import RaceEnv, MAX_SPEED, MIN_SPEED, ACCELERATION, TURN_ACCELERATION,VIEW
-from rl_game.helpers import get_discrete_state
+from rl_game.helpers import get_discrete_state, calc_bins
 import sys
 
 ### Script / Visualization Settings
 LOAD_QTABLE = "load" in sys.argv
 SAVE_QTABLE = "save" in sys.argv
 START_SHOWING_FROM = 0 #400
-SHOW_EVERY = 10
+SHOW_EVERY = 20
 
 ### Training settings
 LEARNING_RATE = 0.5
 DISCOUNT = 0.95
 EPISODES = 2000#000 #10000
-START_RANDOM_STARTING_FROM = 0#200#1500
+START_RANDOM_STARTING_FROM = 100#200#1500
 
 ### Exploration settings
-epsilon = 0.5 # not a constant, qoing to be decayed
+epsilon = 0.05 # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
+# Increase epsilon by delta after n episodes
+EPSILON_PULSE = 0.1
+EPSILON_PULSE_AT = 700
+
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
-# distances of 8 whiskers
-distances_bins = [np.linspace(0, VIEW, 4)]*8
-# for direciton and speed, needs to be designed such that each action ends up in a new bin
-direction_bins = np.linspace(0, 360, int(360/TURN_ACCELERATION+1))
-speed_bins = np.linspace(MIN_SPEED, MAX_SPEED, int((abs(MIN_SPEED)+MAX_SPEED)/ACCELERATION+1)) #ideally: 20
-all_bins = distances_bins + [direction_bins] + [speed_bins]
+all_bins = calc_bins()
+
 # action space
 # Game controls: 0: no action (e.g. keep going straight), 1: forward, 2: backward/brake, 3: left, 4: right
 # For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
@@ -42,14 +42,14 @@ logging_cols = ["Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q
 if LOAD_QTABLE:
     print("LOADING Q-TABLE")
     q_table = np.load("results/q_table.npy")
-    logging_arr = pd.read_feather("results/logging.feather").values
+    logging_list = pd.read_feather("results/logging.feather").values.tolist()
 else:
     # Q-table: state space x action space
-    table_size = [len(bin)-1 for bin in all_bins] + [len(actions)]
+    table_size = [len(bin) for bin in all_bins] + [len(actions)]
     q_table = np.random.uniform(low=-5, high=5, size= table_size)
     # logging
-    logging_arr = np.array(len(logging_cols))
-
+    logging_list = []
+    
 
 # n cells: 
 print(f"Q-table size: {q_table.shape}")
@@ -126,18 +126,23 @@ for episode in range(EPISODES):
     # Decaying is being done every episode if episode number is within decaying range
     if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
         epsilon -= epsilon_decay_value
+    # Add pulse to epsilon
+    if episode == EPSILON_PULSE_AT:
+        epsilon += EPSILON_PULSE
     render = False
     episode_log = [steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
-    np.concatenate([logging_arr, episode_log])
+    logging_list.append(episode_log)
+    # print(logging_list)
+    # print(episode_log)
 
     # every 100 episodes, save q_table + results
     if episode % 100 == 0 and SAVE_QTABLE:
         np.save("results/q_table.npy", q_table)
-        pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")
+        pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
 
 if SAVE_QTABLE:
     # save final Q-table and logging
     np.save("results/q_table.npy", q_table)
-    pd.DataFrame(logging_arr, columns=logging_cols).to_feather("results/logging.feather")
+    pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
 
 pygame.quit()

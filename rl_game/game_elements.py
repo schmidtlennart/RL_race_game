@@ -11,8 +11,8 @@ class CarSprite(pygame.sprite.Sprite):
         self.rect = self.src_image.get_rect()
         self.rect.center = position
         self.position = np.array(position, dtype=float)  # Use a separate attribute for position
-        self.speed = 0.2
-        self.direction = 320
+        self.speed = 0.1 # start unevenly so that the car does not get stuck in qlearning
+        self.direction = 330
         self.MAX_SPEED = MAX_SPEED
         self.MIN_SPEED = MIN_SPEED
         self.ACCELERATION = ACCELERATION

@@ -87,7 +87,8 @@ class RaceEnv(gym.Env):
 
     def get_state(self):
         # return obsrevations etc. for training
-        state = np.concatenate([self.distances, np.array([self.car.direction, self.car.speed])])
+        # for speed, round because floats caused problems in discretization
+        state = np.concatenate([self.distances, np.array([self.car.direction, np.round(self.car.speed)])])
         return state       
 
     def check_loss_win(self):
@@ -128,7 +129,7 @@ class RaceEnv(gym.Env):
             buffered_car = scale_rect(self.car.rect, buffer_ratio)
             buffer_collisions = [buffered_car.colliderect(pad.rect) for pad in self.pads]        
             if np.any(buffer_collisions): 
-                buffer_penalties.append(BUFFER_PENALTY/(buffer_ratio**1.7)) #penalty decreases with increasing buffer ratio
+                buffer_penalties.append(BUFFER_PENALTY/(buffer_ratio**1.5)) #penalty decreases with increasing buffer ratio
             
         self.reward_dict["Wall/Pad Buffer"] = sum(buffer_penalties)
 
