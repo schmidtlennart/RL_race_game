@@ -19,14 +19,14 @@ EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 100#200#1500
 
 ### Exploration settings
-epsilon = 0.05 # not a constant, qoing to be decayed
+epsilon = 0.04 # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 # Increase epsilon by delta after n episodes
 EPSILON_PULSE = 0.1
-EPSILON_PULSE_AT = 700
+EPSILON_PULSE_AT = 7000
 
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
@@ -90,7 +90,6 @@ for episode in range(EPISODES):
             action = np.random.randint(0, len(actions))
         # perform
         new_state, reward, done, checkpoint_reached = environment.step(actions[action])
-        print("Checkpoint reached!") if checkpoint_reached else None
         new_discrete_state = get_discrete_state(new_state, all_bins)
         #print(f"New state: {new_state}")
         #print(f"New state discrete: {new_discrete_state}")
@@ -111,7 +110,9 @@ for episode in range(EPISODES):
             current_q = q_table[discrete_state + (action,)]
             # And here's our equation for a new Q value for current state and action
             new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
-
+        
+        print(f"Checkpoint reached! Q: {new_q},: {reward}") if checkpoint_reached else None
+        
         # Update Q table with new Q value
         q_table[discrete_state + (action,)] = new_q
         
@@ -135,8 +136,8 @@ for episode in range(EPISODES):
     # print(logging_list)
     # print(episode_log)
 
-    # every 100 episodes, save q_table + results
-    if episode % 100 == 0 and SAVE_QTABLE:
+    # every 25 episodes, save q_table + results
+    if episode % 25 == 0 and SAVE_QTABLE:
         np.save("results/q_table.npy", q_table)
         pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
 

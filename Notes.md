@@ -4,11 +4,12 @@
 
 ### ToDO
 
-### Code:
+##### Code:
 
 Prio 1:
 
 * Check binning: 0 of direction, speed as float
+* add logging: sd, mean, median, q10. Why so few max(r)==40?
 * For NN/meaningful binning: Direction as sin/cos (?)
 
 * add orientation (y position, xy dist to checkpoint...) to state (? - policy vs observations)
@@ -23,7 +24,6 @@ Later:
 
 * Fix Penalty for top wall (move trophy?)
 
-
 Viz:
 
 * Live graph of logging metrics
@@ -33,8 +33,18 @@ With DeepQ via NN:
 * replay buffer
 * Policy-gradient approaches
 
-
 Done:
 
 * smoothen out distance penalty
 * dynamic reward_dict
+* debugging binning (still not ideal ideal)
+
+
+# Key Takeaways
+
+* Most important:
+  * Meaningful discretization of continuous state - each bin needs a meaning
+  * Reward shaping until smooth and meaningful everywhere
+* Overwriting Q-values if win/loss or level checkpoint gives the push
+* Explicit guidance: level checkpoints really helpful
+* Adding minimal resting speed helps with being stuck in local minima

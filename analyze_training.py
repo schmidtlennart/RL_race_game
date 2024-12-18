@@ -5,6 +5,7 @@ import pandas as pd
 outpath = "images/logging.png"
 
 logging_df = pd.read_feather("results/logging.feather")
+logging_df["Episode"] = logging_df.index.astype(int)
 # Create subplots
 fig, axs = plt.subplots(4, 1, figsize=(10, 12.5))
 
