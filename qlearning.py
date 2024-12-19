@@ -37,7 +37,7 @@ all_bins = calc_bins()
 # For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
 actions = [(1,0), (-1,0), (0,1), (0,-1)]
 
-logging_cols = ["Steps,", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
+logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 ### INITIALIZE Q-TABLE
 if LOAD_QTABLE:
     print("LOADING Q-TABLE")
@@ -73,7 +73,7 @@ for episode in range(EPISODES):
             render = True
     random_start = episode >= START_RANDOM_STARTING_FROM
     done = False
-    checkpoint_reached = False
+    #checkpoint_reached = False
     steps = 0
     Q = []
     R = []
@@ -99,7 +99,7 @@ for episode in range(EPISODES):
 
         ### UPDATE Q TABLE
         # check if episode is over or checkpoint reached. If so, set Q directly to reward
-        if done or checkpoint_reached:
+        if done: #or checkpoint_reached:
             new_q = reward
         else:
             # Intuition: Update current Q value with the maximum Q value that could be reached after the action
@@ -111,8 +111,8 @@ for episode in range(EPISODES):
             # And here's our equation for a new Q value for current state and action
             new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
         
-        print(f"Checkpoint reached! Q: {new_q},: {reward}") if checkpoint_reached else None
-        
+        print(f"Tropy reached! Q: {new_q}, R: {reward}") if environment.win_condition else None
+
         # Update Q table with new Q value
         q_table[discrete_state + (action,)] = new_q
         

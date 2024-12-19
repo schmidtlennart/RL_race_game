@@ -150,15 +150,15 @@ class RaceEnv(gym.Env):
         if self.checkpoints[self.checkpoint_counter].rect.collidepoint(self.car.rect.center):
             self.checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
             # remove checkpoint from to make sure each checkpoint is only counted once
-            self.checkpoints[self.checkpoint_counter].rect.center = (-100,-100)
+            #self.checkpoints[self.checkpoint_counter].rect.center = (-100,-100)
             if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
                     self.checkpoint_counter += 1
-            # set reward to checkpoint reward and 
-            self.reward = self.checkpoint_reward
-            self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
+            # set reward to checkpoint reward, return and overwrite Q directly
+            #self.reward = self.checkpoint_reward
+            #self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
             self.checkpoint_reached = True
             self.screenmessage = f"Checkpoint reached! Reward: {round(self.reward,1)}"
-            return
+            #return
         # if not reached simply continue adding constant for having made above checkpoint n    
         self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
         
