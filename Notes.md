@@ -8,12 +8,11 @@
 
 Prio 1:
 
-* checkpointing: every 500 episodes
-* Check binning: 0 of direction, speed as float
-* add logging: sd, mean, median, q10. Also log growth of Qtable, n checkpoints reached, win/loss
+* Re-Check binning: 0 of direction, speed as float
+* add logging: sd, mean, median, q10. Also log growth of Qtable, n checkpoints reached, win/loss, TD error
 * For NN/meaningful binning: Direction as sin/cos (?)
 
-* add orientation (y position, xy dist to checkpoint...) to state (? - policy vs observations)
+* add orientation state (y position, xy dist to checkpoint...) to state (? - policy vs observations)
 * Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
 * Analyse Q table via 2/3D-PCA - any paths? (good if smooth edges between paths) or bad: isolated maxima/uniform patterns/jumps?. Maybe mark maxQ paths
 * time penalty? -1 each step
