@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH -D /home/schmidle/code/RL_Race_Game
+#SBATCH --mem-per-cpu=40G
+#SBATCH -c 1 #request cpus
+# output files
+#SBATCH -o /work/schmidle/%j-%x.out
+
+printf "project version: %s" $(git describe --always --dirty --long)
+ml purge
+ml foss/2022b Python/3.11.2-bare
+#export PYTHONPATH=/home/schmidle/VirtualEnvs/anomaly_detection/lib/python3.8/site-packages:$PYTHONPATH
+source /home/schmidle/VirtualEnvs/anomaly_detection/bin/activate
+python -u /home/schmidle/code/isewer/anomaly_detection/paper/compare_distributions_by_method.py
