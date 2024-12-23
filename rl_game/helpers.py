@@ -1,5 +1,9 @@
+import pygame
+from PIL import Image
 import numpy as np
+import os
 from rl_game.game_config import VIEW, TURN_ACCELERATION, ACCELERATION, MIN_SPEED, MAX_SPEED
+
 ## QLEARNING HELPERS
 def get_discrete_state(observations, in_bins):
     # map current observation to bins of the Q-table
@@ -34,3 +38,43 @@ def calc_bins():
     speed_bins = np.linspace(-8, 8, int(16/ACCELERATION+1))
     all_bins = distances_bins + [direction_bins] + [speed_bins]
     return all_bins
+
+class PygameRecord:
+    def __init__(self, filename: str, fps: int):
+        self.fps = fps
+        # check if filename exists, if so add _1, _2, _3, etc.
+        base, ext = filename.rsplit('.', 1)
+        counter = 1
+        new_filename = f"{base}_{counter}.{ext}"
+        while os.path.exists(new_filename):
+            counter += 1
+            new_filename = f"{base}_{counter}.{ext}"
+        self.filename = new_filename
+        self.frames = []
+
+    def add_frame(self):
+        curr_surface = pygame.display.get_surface()
+        x3 = pygame.surfarray.array3d(curr_surface)
+        x3 = np.moveaxis(x3, 0, 1)
+        array = Image.fromarray(np.uint8(x3))
+        self.frames.append(array)
+
+    def save(self):
+        self.frames[0].save(
+            self.filename,
+            save_all=True,
+            optimize=False,
+            append_images=self.frames[1:],
+            loop=0,
+            duration=int(1000 / self.fps),
+        )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            print(f"An exception of type {exc_type} occurred: {exc_value}")
+        self.save()
+        # Return False if you want exceptions to propagate, True to suppress them
+        return False

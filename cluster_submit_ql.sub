@@ -9,5 +9,5 @@ printf "project version: %s" $(git describe --always --dirty --long)
 ml purge
 ml foss/2022b Python/3.11.2-bare
 #export PYTHONPATH=/home/schmidle/VirtualEnvs/anomaly_detection/lib/python3.8/site-packages:$PYTHONPATH
-source /home/schmidle/VirtualEnvs/anomaly_detection/bin/activate
-python -u /home/schmidle/code/isewer/anomaly_detection/paper/compare_distributions_by_method.py
+source /home/schmidle/VirtualEnvs/RL_Race_Game/bin/activate
+python -u /home/schmidle/code/isewer/RL_Race_Game/qlearning.py
