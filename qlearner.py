@@ -1,40 +1,65 @@
-
+import sys
+import numpy as np
 import pygame
 from rl_game.racegame import RaceEnv
-from rl_game.game_config import VIEW, TURN_ACCELERATION, ACCELERATION, MIN_SPEED, MAX_SPEED
-import numpy as np
-from rl_game.game_config import VIEW
-from rl_game.helpers import get_discrete_state, calc_bins
+from rl_game.helpers import get_discrete_state, calc_bins, PygameRecord
 
+# Check if "record" argument is present in sys.argv
+RECORD = "record" in sys.argv
+
+# Initialize environment and other variables
+environment = RaceEnv()
+environment.init_render()
 all_bins = calc_bins()
+q_table = np.load("results/q_table.npy")  # Load Q-table
+actions = [(1, 0), (-1, 0), (0, 1), (0, -1)]  # Define actions
 
-q_table = np.load("results/q_table.npy")
+# Start position
+discrete_state = get_discrete_state(environment.reset(random_start=True), all_bins)
+epsilon = 0.01
+done = False
+n_frames = 300  # Number of frames to record
 
-########################
-    environment = RaceEnv()
-    environment.init_render()
-    # start position
-    discrete_state = get_discrete_state(environment.reset(random_start = True), all_bins)
+# Conditionally initialize the recorder
+if RECORD:
+    recorder = PygameRecord("gifs/recording.gif", 30)
 
-
-    run = True
-
-    while run:
-
-        # set game speed to 30 fps
+try:
+    while not done:
+        # Set game speed to 30 fps
         environment.clock.tick(30)
-        # ─── CONTROLS ───────────────────────────────────────────────────────────────────
-        # get pressed keys, generate action
-        action = np.argmax(q_table[discrete_state])
-        # calculate one step
-        new_state, _,_,_ = environment.step(action)
-        ########
-        discrete_state = get_discrete_state(new_state, all_bins)    
-        # render current state
+        
+        # Still needs some epsilon otherwise gets stuck in minima
+        if np.random.random() > epsilon:
+            # Exploit: Get action from Q table
+            action = np.argmax(q_table[discrete_state])
+        else:
+            # Explore: Get random action
+            action = np.random.randint(0, len(actions))
+        action = actions[action]
+        
+        # Calculate one step
+        new_state, _, done, _ = environment.step(action)
+        discrete_state = get_discrete_state(new_state, all_bins)
+        
+        # Render current state
         environment.render()
-
+        
+        # Conditionally record the frame
+        if RECORD:
+            recorder.add_frame()
+            n_frames -= 1
+            if n_frames == 0:
+                break
+finally:
+    # Conditionally save the recording and quit pygame
+    if RECORD:
+        recorder.save()
     pygame.quit()
 
+
+        # overwrite if manual key pressed
+        #action = environment.pressed_to_action()
 
     ### Let Qlearner start randomly and just let it run
 
