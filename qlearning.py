@@ -9,24 +9,24 @@ import sys
 ### Script / Visualization Settings
 LOAD_QTABLE = "load" in sys.argv
 SAVE_QTABLE = "save" in sys.argv
-START_SHOWING_FROM = 0 #400
+START_SHOWING_FROM = 4000 #400
 SHOW_EVERY = 20
 
 ### Training settings
 LEARNING_RATE = 0.5
 DISCOUNT = 0.95
-EPISODES = 2000#000 #10000
-START_RANDOM_STARTING_FROM = 100#200#1500
+EPISODES = 500#000 #10000
+START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.04 # not a constant, qoing to be decayed
-EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
+epsilon = 0.001 # not a constant, qoing to be decayed
+EPSILON_MIN = 0 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = EPISODES//2
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 # Increase epsilon by delta after n episodes
-EPSILON_PULSE = 0.1
-EPSILON_PULSE_AT = 7000
+EPSILON_PULSE = 0.02
+EPSILON_PULSE_AT = 1000
 
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
@@ -67,8 +67,9 @@ random_start = False # Only start at random position after n episodes
 
 # Q-learning loop
 for episode in range(EPISODES):
+    print(f"Episode: {episode}, epsilon: {round(epsilon,5)}")
+    
     if (episode % SHOW_EVERY == 0):#only plot every n episodes after initial episodes are over
-        print(f"Episode: {episode}, epsilon: {round(epsilon,5)}")
         if episode >= START_SHOWING_FROM:
             render = True
     random_start = episode >= START_RANDOM_STARTING_FROM

@@ -21,13 +21,13 @@ ax0.legend(loc='upper left')
 ax1.set_ylabel("Scaled Cumulative Q")
 ax1.legend(loc='upper right')
 
-# Plot 2: epsilon, cumulative Reward
+# Plot 2: steps, cumulative Reward
 ax2 = plt.subplot(612)
 ax3 = ax2.twinx()
 ax2.plot(logging_df["Episode"], logging_df["Steps"], label="Steps", color='gray')
 ax3.plot(logging_df["Episode"], logging_df["Cumulative Reward"] / logging_df["Steps"], label="Reward", color='lightgreen')
 ax2.set_title("n Steps, Cumulative Reward scaled by n steps")
-ax2.set_xlabel("Episode")
+ax2.set_xlabel("Steps")
 ax2.set_ylabel("Epsilon")
 ax2.legend(loc='upper left')
 ax3.set_ylabel("Scaled Cumulative R")
