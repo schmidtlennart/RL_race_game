@@ -137,7 +137,7 @@ for episode in range(EPISODES):
     # print(episode_log)
 
     # every 25 episodes, save q_table + results
-    if episode % 25 == 0 and SAVE_QTABLE:
+    if episode % 10 == 0 and SAVE_QTABLE:
         np.save("results/q_table.npy", q_table)
         pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
 
