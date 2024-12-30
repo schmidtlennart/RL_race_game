@@ -16,7 +16,7 @@ Reward function design and agent strategy optimization require mutual optimizati
 
 ## Qlearning
 
-![Q-table agent getting stuck in local minimum](doc/recording_stuck.gif "Q-table agent getting stuck in local minimum"){width=50%}
+![Q-table agent exploring the maze](doc/recording.gif "Q-table agent exploring the maze"){width=50%}
 
 Before going into any machine learning approaches, I Implemented traditional [Qlearning](https://en.wikipedia.org/wiki/Q-learning) via a Q-table that represents the state and action space in a table. Naturally, this is not the best choice for a continous environment but it helps in refining the environment and reward shaping. We can log the learning process to see if the agent actually improves in solving the maze:
 
