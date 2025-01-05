@@ -15,18 +15,18 @@ SHOW_EVERY = 20
 ### Training settings
 LEARNING_RATE = 0.5
 DISCOUNT = 0.95
-EPISODES = 500#000 #10000
+EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.001 # not a constant, qoing to be decayed
-EPSILON_MIN = 0 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
+epsilon = 0.035 # not a constant, qoing to be decayed
+EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
-END_EPSILON_DECAYING = EPISODES//2
+END_EPSILON_DECAYING = 500
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 # Increase epsilon by delta after n episodes
 EPSILON_PULSE = 0.02
-EPSILON_PULSE_AT = 1000
+EPSILON_PULSE_AT = 700
 
 
 ### STATES & ACTIONS: create bins of continous states for the Q-table
@@ -37,7 +37,9 @@ all_bins = calc_bins()
 # For qlearning, we drop no action [0,0] to prevent the agent from getting stuck. has to either move or turn
 actions = [(1,0), (-1,0), (0,1), (0,-1)]
 
-logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
+logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumulative TD-Error", 
+                "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
+#logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumulative TD-Error", "P10 TDE","P90 TDE","Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 ### INITIALIZE Q-TABLE
 if LOAD_QTABLE:
     print("LOADING Q-TABLE")
@@ -76,8 +78,10 @@ for episode in range(EPISODES):
     done = False
     #checkpoint_reached = False
     steps = 0
-    Q = []
-    R = []
+    # logging
+    qs_episode = [] #Q values
+    rs_episode = [] # rewards
+    tdes_episode = [] # TD error
     # get initial state
     discrete_state = get_discrete_state(environment.reset(random_start = random_start), all_bins)
 
@@ -111,6 +115,8 @@ for episode in range(EPISODES):
             current_q = q_table[discrete_state + (action,)]
             # And here's our equation for a new Q value for current state and action
             new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
+            # td error for logging
+            td_error = (reward + DISCOUNT * max_future_q) - current_q
         
         print(f"Tropy reached! Q: {new_q}, R: {reward}") if environment.win_condition else None
 
@@ -121,18 +127,25 @@ for episode in range(EPISODES):
         discrete_state = new_discrete_state
 
         # log
-        Q.append(new_q)
-        R.append(reward)
+        tdes_episode.append(td_error)
+        qs_episode.append(new_q)
+        rs_episode.append(reward)
         steps += 1
 
+    # Add a later stage, add pulse to epsilon and restart decaying
+    if episode == EPSILON_PULSE_AT:
+        epsilon += EPSILON_PULSE       
+        START_EPSILON_DECAYING = EPSILON_PULSE_AT
+        END_EPSILON_DECAYING = EPSILON_PULSE_AT + (END_EPSILON_DECAYING - START_EPSILON_DECAYING)
     # Decaying is being done every episode if episode number is within decaying range
     if END_EPSILON_DECAYING >= episode >= START_EPSILON_DECAYING:
         epsilon -= epsilon_decay_value
-    # Add pulse to epsilon
-    if episode == EPSILON_PULSE_AT:
-        epsilon += EPSILON_PULSE
+    print("Steps: ", steps)
     render = False
-    episode_log = [steps, epsilon, np.sum(Q), np.sum(R), np.max(Q), np.min(Q),np.quantile(Q, 0.9), np.max(R), np.min(R),np.quantile(R, 0.9), environment.car.rect.center[0], environment.car.rect.center[1]]
+    episode_log = [steps, epsilon, np.sum(qs_episode), np.sum(rs_episode), np.sum(tdes_episode), np.max(qs_episode), np.min(qs_episode),np.quantile(qs_episode, 0.9), np.max(rs_episode), np.min(rs_episode),np.quantile(rs_episode, 0.9), 
+                   environment.car.rect.center[0], environment.car.rect.center[1]]
+    # episode_log = [steps, epsilon, np.sum(qs_episode), np.sum(rs_episode), np.sum(tdes_episode), np.quantile(tdes_episode,0.1),np.quantile(tdes_episode,0.9), np.max(qs_episode), np.min(qs_episode),np.quantile(qs_episode, 0.9), np.max(rs_episode), np.min(rs_episode),np.quantile(rs_episode, 0.9), 
+    #                environment.car.rect.center[0], environment.car.rect.center[1]]
     logging_list.append(episode_log)
     # print(logging_list)
     # print(episode_log)

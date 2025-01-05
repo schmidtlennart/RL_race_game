@@ -12,7 +12,7 @@ Prio 1:
 * add logging: sd, mean, median, q10. Also log growth of Qtable, n checkpoints reached, win/loss, TD error
 * For NN/meaningful binning: Direction as sin/cos (?)
 
-* add orientation state (y position, xy dist to checkpoint...) to state (? - policy vs observations)
+* add orientation state (y position, xy dist/orientation toof trophy to checkpoint...) to state (? - policy vs observations)
 * Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
 * Analyse Q table via 2/3D-PCA - any paths? (good if smooth edges between paths) or bad: isolated maxima/uniform patterns/jumps?. Maybe mark maxQ paths
 * time penalty? -1 each step
