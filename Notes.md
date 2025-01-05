@@ -8,6 +8,8 @@
 
 Prio 1:
 
+* reduce backwarsd speed so that it advances forward preferrably
+* reduce narrowness in parts of the map (including trophy)
 * Re-Check binning: 0 of direction, speed as float
 * add logging: sd, mean, median, q10. Also log growth of Qtable, n checkpoints reached, win/loss, TD error
 * For NN/meaningful binning: Direction as sin/cos (?)

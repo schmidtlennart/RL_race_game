@@ -4,12 +4,14 @@ import pandas as pd
 import pygame
 from rl_game.racegame import RaceEnv
 from rl_game.helpers import get_discrete_state, calc_bins
+from rl_game.deepq_learners import DeepQLearner
 import sys
 
 ### Script / Visualization Settings
-LOAD_QTABLE = "load" in sys.argv
-SAVE_QTABLE = "save" in sys.argv
-START_SHOWING_FROM = 0 #400
+LOAD_QMODELS = "load" in sys.argv
+SAVE_QMODELS = "save" in sys.argv
+
+START_SHOWING_FROM = 4000 #400
 SHOW_EVERY = 20
 
 ### Training settings
@@ -19,7 +21,7 @@ EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.04 # not a constant, qoing to be decayed
+epsilon = 0.035 # not a constant, qoing to be decayed
 EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = 500
@@ -40,17 +42,18 @@ actions = [(1,0), (-1,0), (0,1), (0,-1)]
 logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumulative TD-Error", 
                 "Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
 #logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumulative TD-Error", "P10 TDE","P90 TDE","Max Q", "Min Q", "P90 Q","Max R", "Min R","P90 R", "endX", "endY"]
-### INITIALIZE Q-TABLE
-if LOAD_QTABLE:
-    print("LOADING Q-TABLE")
-    q_table = np.load("results/q_table.npy")
-    logging_list = pd.read_feather("results/logging.feather").values.tolist()
+
+    
+
+### INITIALIZE AGENT
+if LOAD_QMODELS:
+    print("LOADING Q-MODELS")
+    # ToDO
+#    logging_list = pd.read_feather("results/logging.feather").values.tolist()
 else:
-    # Q-table: state space x action space
-    table_size = [len(bin) for bin in all_bins] + [len(actions)]
-    q_table = np.random.uniform(low=-5, high=5, size= table_size)
-    # logging
-    logging_list = []
+    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
+    
+
 # n cells: 
 print(f"Q-table size: {q_table.shape}")
 num_values = np.prod(q_table.shape)
@@ -81,19 +84,13 @@ for episode in range(EPISODES):
     rs_episode = [] # rewards
     tdes_episode = [] # TD error
     # get initial state
-    discrete_state = get_discrete_state(environment.reset(random_start = random_start), all_bins)
+    current_state = get_discrete_state(environment.reset(random_start = random_start), all_bins)
 
     while not done:
         # Get action: exploit or explore
-        if np.random.random() > epsilon:
-            # Exploit: Get action from Q table
-            action = np.argmax(q_table[discrete_state])
-        else:
-            # Explore: Get random action
-            action = np.random.randint(0, len(actions))
+        action = q_agent.act(current_state, epsilon)
         # perform
         new_state, reward, done, checkpoint_reached = environment.step(actions[action])
-        new_discrete_state = get_discrete_state(new_state, all_bins)
         #print(f"New state: {new_state}")
         #print(f"New state discrete: {new_discrete_state}")
         # render current state

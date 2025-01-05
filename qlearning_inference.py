@@ -11,10 +11,8 @@ RECORD = "record" in sys.argv
 environment = RaceEnv()
 environment.init_render()
 all_bins = calc_bins()
-q_table = np.load("results/q_table.npy")  # Load Q-table
+q_table = np.load("results/q_table_eve_good.npy")  # Load Q-table
 actions = [(1, 0), (-1, 0), (0, 1), (0, -1)]  # Define actions
-
-q_table.shape
 
 # run 2d-PCA on q_table and visualize how the agent moves
 # 1. PCA on q_table
@@ -23,36 +21,36 @@ q_table.shape
 
 # 1. PCA on q_table
 # first reshape to 2D along actions
-num_samples = np.prod(q_table.shape[:-1])  # Calculate the number of samples
-num_actions = q_table.shape[-1]  # The last dimension represents the actions
-q_table_reshaped = q_table.reshape(num_samples, num_actions)
+# num_samples = np.prod(q_table.shape[:-1])  # Calculate the number of samples
+# num_actions = q_table.shape[-1]  # The last dimension represents the actions
+# q_table_reshaped = q_table.reshape(num_samples, num_actions)
 
-from sklearn.decomposition import PCA
-pca = PCA(n_components=2)
-q_table_pca = pca.fit_transform(q_table_reshaped)
+# from sklearn.decomposition import PCA
+# pca = PCA(n_components=2)
+# q_table_pca = pca.fit_transform(q_table_reshaped)
 
-q_table_reshaped.shape
-q_table_pca.shape
+# q_table_reshaped.shape
+# q_table_pca.shape
 
-def plot_2d_qtable(q_table_pca):
-    import matplotlib.pyplot as plt
-    plt.scatter(q_table_pca[:, 0], q_table_pca[:, 1])
-    plt.xlabel("PCA 1")
-    plt.ylabel("PCA 2")
-    plt.title("2D PCA of Q-table")
-    plt.savefig("images/q_table_pca.png")
+# def plot_2d_qtable(q_table_pca):
+#     import matplotlib.pyplot as plt
+#     plt.scatter(q_table_pca[:, 0], q_table_pca[:, 1])
+#     plt.xlabel("PCA 1")
+#     plt.ylabel("PCA 2")
+#     plt.title("2D PCA of Q-table")
+#     plt.savefig("images/q_table_pca.png")
 
-plot_2d_qtable(q_table_pca)
+# plot_2d_qtable(q_table_pca)
 
 # Start position
 discrete_state = get_discrete_state(environment.reset(random_start=True), all_bins)
-epsilon = 0.0005
+epsilon = 0.001  # Epsilon value for exploitation vs exploration
 done = False
 n_frames = 2000  # Number of frames to record
 
 # Conditionally initialize the recorder
 if RECORD:
-    recorder = PygameRecord("gifs/recording.gif", 30)
+    recorder = PygameRecord("gifs/recording.gif", 15)
 step_counter = 0
 
 try:
