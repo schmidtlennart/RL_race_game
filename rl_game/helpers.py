@@ -27,7 +27,7 @@ def get_discrete_state(observations, in_bins):
 def calc_bins():
     # get_discrete_states uses np.digitize that checks x <= bins[i]. so drop the first bin value
     # distances of 8 whiskers, add separate bin for when whisker sees nothing (set to VIEW*1.1)
-    distances_bins = [np.concat([np.linspace(15, VIEW, 4)[1:],np.array([VIEW*1.1])])]*8 #= 3 bins + 1 bin for "far away"
+    distances_bins = [np.concatenate([np.linspace(15, VIEW, 4)[1:],np.array([VIEW*1.1])])]*8 #= 3 bins + 1 bin for "far away"
     # for direciton and speed, needs to be designed such that each action ends up in a new bin
     # direction: [0, 359]
     # still one bin too much: 0 gets its own discrete bin

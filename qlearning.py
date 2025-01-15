@@ -7,8 +7,10 @@ from rl_game.helpers import get_discrete_state, calc_bins
 import sys
 
 ### Script / Visualization Settings
-LOAD_QTABLE = "load" in sys.argv
-SAVE_QTABLE = "save" in sys.argv
+LOAD = "load" in sys.argv
+SAVE = "save" in sys.argv
+FOLDER_NAME = "deepq_nn"
+
 START_SHOWING_FROM = 0 #400
 SHOW_EVERY = 20
 

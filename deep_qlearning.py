@@ -5,14 +5,16 @@ import pygame
 from rl_game.racegame import RaceEnv
 from rl_game.helpers import get_discrete_state, calc_bins
 from rl_game.deepq_learners import DeepQLearner
+import torch
 import sys
 
 ### Script / Visualization Settings
-LOAD_QMODELS = "load" in sys.argv
-SAVE_QMODELS = "save" in sys.argv
+LOAD = "load" in sys.argv
+SAVE = "save" in sys.argv
+FOLDER_NAME = "deepq_nn"
 
-START_SHOWING_FROM = 4000 #400
-SHOW_EVERY = 20
+START_SHOWING_FROM = 50 #400
+SHOW_EVERY = 1
 
 ### Training settings
 LEARNING_RATE = 0.5
@@ -21,8 +23,8 @@ EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.035 # not a constant, qoing to be decayed
-EPSILON_MIN = 0.001 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
+epsilon = 0.1 # not a constant, qoing to be decayed
+EPSILON_MIN = 0 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
 END_EPSILON_DECAYING = 500
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
@@ -46,22 +48,23 @@ logging_cols = ["Steps", "Epsilon", "Cumulative Q", "Cumulative Reward", "Cumula
     
 
 ### INITIALIZE AGENT
-if LOAD_QMODELS:
+
+if LOAD:
     print("LOADING Q-MODELS")
-    # ToDO
-#    logging_list = pd.read_feather("results/logging.feather").values.tolist()
+    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, 
+                           buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
+    q_agent.qnetwork_local.load_state_dict(torch.load(f"results/{FOLDER_NAME}/qnetwork_local.pth"))
+    q_agent.qnetwork_local.eval()
+    q_agent.qnetwork_target.load_state_dict(torch.load(f"results/{FOLDER_NAME}/qnetwork_target.pth"))
+    q_agent.qnetwork_target.eval()
+    logging_list = pd.read_feather(f"results/{FOLDER_NAME}/logging.feather").values.tolist()
 else:
-    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
-    
-
-# n cells: 
-print(f"Q-table size: {q_table.shape}")
-num_values = np.prod(q_table.shape)
-print(f"Total number of values in Q-table: {num_values}")
-
+    q_agent = DeepQLearner(state_size=10, action_size=len(actions), seed=36, 
+                           buffer_size=10000, batch_size=64, discount=DISCOUNT, lr=0.001, tau=0.001, update_every=4)
+   # logging
+    logging_list = []
 
 ### QLEARNING LOOP
-
 # initialize environment
 environment = RaceEnv()
 environment.init_render()
@@ -84,42 +87,25 @@ for episode in range(EPISODES):
     rs_episode = [] # rewards
     tdes_episode = [] # TD error
     # get initial state
-    current_state = get_discrete_state(environment.reset(random_start = random_start), all_bins)
+    current_state = environment.reset(random_start = random_start)
 
     while not done:
         # Get action: exploit or explore
         action = q_agent.act(current_state, epsilon)
         # perform
         new_state, reward, done, checkpoint_reached = environment.step(actions[action])
-        #print(f"New state: {new_state}")
-        #print(f"New state discrete: {new_discrete_state}")
+
         # render current state
         if render:
             environment.render()
 
-        ### UPDATE Q TABLE
-        # check if episode is over or checkpoint reached. If so, set Q directly to reward
-        if done: #or checkpoint_reached:
-            new_q = reward
-        else:
-            # Intuition: Update current Q value with the maximum Q value that could be reached after the action
-            # Maximum possible Q value in next step (for new state)
-            max_future_q = np.max(q_table[new_discrete_state])
+        # Get !s from loacl and target networks, every n runs train them
+        max_future_q, current_q, new_q, td_error = q_agent.step(current_state, action, reward, new_state, done)
 
-            # Current Q value (for current state and performed action)
-            current_q = q_table[discrete_state + (action,)]
-            # And here's our equation for a new Q value for current state and action
-            new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
-            # td error for logging
-            td_error = (reward + DISCOUNT * max_future_q) - current_q
-        
         print(f"Tropy reached! Q: {new_q}, R: {reward}") if environment.win_condition else None
-
-        # Update Q table with new Q value
-        q_table[discrete_state + (action,)] = new_q
-        
+      
         # Update current state for new loop
-        discrete_state = new_discrete_state
+        current_state = new_state
 
         # log
         tdes_episode.append(td_error)
@@ -145,14 +131,16 @@ for episode in range(EPISODES):
     # print(logging_list)
     # print(episode_log)
 
-    # every 25 episodes, save q_table + results
-    if episode % 10 == 0 and SAVE_QTABLE:
-        np.save("results/q_table.npy", q_table)
-        pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
-
-if SAVE_QTABLE:
-    # save final Q-table and logging
-    np.save("results/q_table.npy", q_table)
-    pd.DataFrame(logging_list, columns=logging_cols).to_feather("results/logging.feather")
+    # every 25 episodes, save models + results
+    if episode % 10 == 0 and SAVE:
+        # save models
+        torch.save(q_agent.qnetwork_local.state_dict(), f"results/{FOLDER_NAME}/qnetwork_local.pth")
+        torch.save(q_agent.qnetwork_target.state_dict(), f"results/{FOLDER_NAME}/qnetwork_target.pth")
+        pd.DataFrame(logging_list, columns=logging_cols).to_feather(f"results/{FOLDER_NAME}/logging.feather")
+# final save
+if SAVE:
+        torch.save(q_agent.qnetwork_local.state_dict(), f"results/{FOLDER_NAME}/qnetwork_local.pth")
+        torch.save(q_agent.qnetwork_target.state_dict(), f"results/{FOLDER_NAME}/qnetwork_target.pth")
+        pd.DataFrame(logging_list, columns=logging_cols).to_feather(f"results/{FOLDER_NAME}/logging.feather")
 
 pygame.quit()

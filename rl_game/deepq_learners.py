@@ -41,12 +41,34 @@ class DeepQLearner:
         self.t_step = 0
 
     def step(self, state, action, reward, next_state, done):
+        # turn states into tensors
+        state = torch.from_numpy(state).float().unsqueeze(0).to(device)
+        next_state = torch.from_numpy(next_state).float().unsqueeze(0).to(device)
+        action = torch.tensor([[action]]).to(device)
+        
         self.memory.append((state, action, reward, next_state, done))
+        # predict Q values for this step for logging
+        # get target Q, i.e. Q_targets = r + γ * max(Q(s',a))
+        # t.max(1) will return the largest column value of each row.
+        # second column on max result is index of where max element was
+        # found, so we pick action with the larger expected reward.
+        #policy_net(state).max(1).indices.view(1, 1)
+        Q_target_next = self.qnetwork_target(next_state).detach().max(1)[0].unsqueeze(1)
+        Q_target = reward + (self.discount * Q_target_next) * (1 - done)
+        # get local Q, i.e. Q(s,a)
+        Q_expected = self.qnetwork_local(state).gather(1, action)
+        # calculate TD error
+        td_error = Q_target - Q_expected
+        # every n steps, train both networks
         self.t_step = (self.t_step + 1) % self.update_every
         if self.t_step == 0:
             if len(self.memory) > self.batch_size:
+                # sample one batch from experiences and train both the local and target network
                 experiences = self.sample()
-                self.learn(experiences, self.discount)
+                #print("Training Local and Target Networks")
+                self.learn(experiences)
+        return [x.detach().numpy() for x in [Q_target_next, Q_expected, Q_target, td_error]]
+
 
     def act(self, state, epsilon=0.):
         # epsilon-greedy action selection
@@ -63,21 +85,21 @@ class DeepQLearner:
         else:
             return random.choice(np.arange(self.action_size))
 
-    def learn(self, experiences, discount):
+    def learn(self, experiences):
         states, actions, rewards, next_states, dones = experiences
         # get target Q, i.e. Q_targets = r + γ * max(Q(s',a))
         Q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
-        Q_targets = rewards + (discount * Q_targets_next * (1 - dones))
+        Q_targets = rewards + (self.discount * Q_targets_next * (1 - dones))
         # get local Q, i.e. Q(s,a)
         Q_expected = self.qnetwork_local(states).gather(1, actions)
-
+        ### Train local network
         # Minimize TD error: backprop for local network to train towards target
         loss = nn.MSELoss()(Q_expected, Q_targets)
         #nn.SmoothL1Loss()(Q_expected, Q_targets)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        # soft update target network
+        self.optimizer.zero_grad() # reset gradients
+        loss.backward() #backprop
+        self.optimizer.step() # update weights
+        ### Soft update target network
         self.soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
 
     def soft_update(self, local_model, target_model, tau):

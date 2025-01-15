@@ -16,13 +16,13 @@ Reward function design and agent strategy optimization require mutual optimizati
 
 ## Qlearning
 
-![Q-table agent exploring the maze](doc/recording.gif "Q-table agent exploring the maze"){width=50%}
+![Q-table agent exploring the maze](doc/recording_success.gif "Q-table agent exploring the maze"){width=50%}
 
 Before going into any machine learning approaches, I Implemented traditional [Qlearning](https://en.wikipedia.org/wiki/Q-learning) via a Q-table that represents the state and action space in a table. Naturally, this is not the best choice for a continous environment but it helps in refining the environment and reward shaping. We can log the learning process to see if the agent actually improves in solving the maze:
 
 ![Logging the learning process](doc/reward_submaps.png "Logging the learning process"){width=25%}
 
-The agent learns to avoid walls and to navigate the maze, resulting in increasing runs that actually reach the trophy. However, when in inference mode, it gets stuck in local minima of the Q-table quite often which leads to rocking back and forth without actually advancing:
+The agent learns to avoid walls and to navigate the maze, resulting in increasing runs that actually reach the trophy (no one said doing so in reverse was not allowed). However, it gets stuck in local minima of the Q-table quite often which leads to rocking back and forth without actually advancing.
 
 My key takeaways so far:
 * Meaningful discretization of continuous state - each bin needs a meaning

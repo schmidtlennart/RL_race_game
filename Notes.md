@@ -7,17 +7,19 @@
 ##### Code:
 
 Prio 1:
-
+* check deepQ logging
 * reduce backwarsd speed so that it advances forward preferrably
 * reduce narrowness in parts of the map (including trophy)
-* Re-Check binning: 0 of direction, speed as float
-* add logging: sd, mean, median, q10. Also log growth of Qtable, n checkpoints reached, win/loss, TD error
 * For NN/meaningful binning: Direction as sin/cos (?)
-
 * add orientation state (y position, xy dist/orientation toof trophy to checkpoint...) to state (? - policy vs observations)
 * Add later exploration impulses: Annilated / Sinus-based decay or coupled with progress in learning Q
 * Analyse Q table via 2/3D-PCA - any paths? (good if smooth edges between paths) or bad: isolated maxima/uniform patterns/jumps?. Maybe mark maxQ paths
-* time penalty? -1 each step
+* time penalty? -x at destination
+
+Prio 2:
+* add logging: growth of Qtable, n checkpoints reached, win/loss
+* Re-Check binning: 0 of direction, speed as float
+
 
 Later:
 
