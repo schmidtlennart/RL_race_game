@@ -1,9 +1,12 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import sys
 
-outpath = "images/logging.png"
+outfolder = sys.argv[1]
 
-logging_df = pd.read_feather("results/logging.feather")
+outpath = f"images/{outfolder}/logging.png"
+
+logging_df = pd.read_feather(f"results/{outfolder}/logging.feather")
 logging_df["Episode"] = logging_df.index.astype(int)
  
 logging_df.tail()

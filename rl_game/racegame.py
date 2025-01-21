@@ -3,16 +3,17 @@ import numpy as np
 from pygame.locals import *
 import gym
 from rl_game.game_elements import CarSprite, PadSprite, CheckpointSprite, Trophy
-from rl_game.game_helpers import scale_rect
+from rl_game.game_helpers import scale_rect, degree_to_sin_cos
 from rl_game.game_config import *
 class RaceEnv(gym.Env):
     # environment class based off of gym.Env
     # Screen definition (x,y): Top left: (0,0), Bottom right: (WINDOW_WIDTH,WINDOW_HEIGHT)
-    def __init__(self):
+    def __init__(self, mode="qtable"):
         # Parameters that might be changed from outside
         # whether to start at random position
         self.random_start = False
         self.initialize_environment()
+        self.mode = mode #"qtable", "deepq_nn": return orientation as sin/cos
 
     def initialize_environment(self):
         # initialize pygame
@@ -35,7 +36,7 @@ class RaceEnv(gym.Env):
         self.checkpoints = [CheckpointSprite(checkpoint) for checkpoint in checkpoints_list]
         self.checkpoint_group = pygame.sprite.Group(self.checkpoints)
         self.checkpoint_counter = 0
-        self.checkpoint_reward = 0
+
         # create trophy
         self.trophy = Trophy((298,20))
         self.trophy_group = pygame.sprite.Group(self.trophy)#only needed for collision calculation
@@ -46,6 +47,8 @@ class RaceEnv(gym.Env):
             start_position = (start_position[0] + np.random.randint(0,900),start_position[1] + np.random.randint(-20,20))
         self.car = CarSprite(IMAGEPATH+'car.png', start_position)
         self.car_group = pygame.sprite.Group(self.car)#only needed for collision calculation
+        self.distance_checkpoint = self.car.calc_distance_to_checkpoint(self.checkpoints[self.checkpoint_counter].rect.center)       
+
         # calculate first whiskers
         self.calculate_whiskers()       
 
@@ -87,7 +90,13 @@ class RaceEnv(gym.Env):
     def get_state(self):
         # return obsrevations etc. for training
         # for speed, round because floats caused problems in discretization
-        state = np.concatenate([self.distances, np.array([self.car.direction, np.round(self.car.speed)])])
+        if self.mode == "deepq_nn":
+            direction_out = degree_to_sin_cos(self.car.direction)
+            dist_to_trophy = np.array(self.car.rect.center) - np.array(self.trophy.rect.center)
+            # more state features: whisker distances, direction, speed, distance to trophy, distance to next checkpoint
+            state = np.concatenate([self.distances, direction_out, np.round(self.car.speed), dist_to_trophy, self.distance_checkpoint])        
+        elif self.mode == "qtable":
+            state = np.concatenate([self.distances, np.array([self.car.direction, np.round(self.car.speed)])])
         return state       
 
     def check_loss_win(self):
@@ -145,36 +154,44 @@ class RaceEnv(gym.Env):
         # #reward.append(distance_trophy)
 
         ### 4. CHECKPOINT REACHED
-        # if checkpoint n is reached, overwrite Q directly with reward and add constant to reward from there on
         self.checkpoint_reached = False
+        # 1. if the next checkpoint is reached, update counter, add reward
         if self.checkpoints[self.checkpoint_counter].rect.collidepoint(self.car.rect.center):
-            self.checkpoint_reward = CHECKPOINT_REWARD*(self.checkpoint_counter+1)#needs to be 1-indexed
+            cp_reward = CHECKPOINT_REWARD#needs to be 1-indexed
             # remove checkpoint from to make sure each checkpoint is only counted once
             #self.checkpoints[self.checkpoint_counter].rect.center = (-100,-100)
             if (self.checkpoint_counter < len(self.checkpoints)-1):#as long as not in final zone, next checkpoint has to be reached
                     self.checkpoint_counter += 1
             # set reward to checkpoint reward, return and overwrite Q directly
-            #self.reward = self.checkpoint_reward
-            #self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
+            self.reward = cp_reward
+            self.reward_dict["Checkpoint Level"] = cp_reward
             self.checkpoint_reached = True
             self.screenmessage = f"Checkpoint reached! Reward: {round(self.reward,1)}"
-            #return
-        # if not reached simply continue adding constant for having made above checkpoint n    
-        self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
+            return
+        # 2. However, if below previous checkpoint again (positive y distance), decrease give penalty and decrease counter again
+        distance_to_prev_cp = self.car.rect.centery-self.checkpoints[self.checkpoint_counter-1].rect.bottom #calculation a bit different here than below
+        if self.checkpoint_counter > 0 and distance_to_prev_cp > 10:#if below previous checkpoint by n pixels
+            cp_reward = -CHECKPOINT_REWARD
+            self.checkpoint_counter -= 1
+            self.reward = cp_reward
+            self.reward_dict["Checkpoint Level"] = cp_reward
+            self.screenmessage = f"Penalty: Below previous Checkpoint! Reward: {round(self.reward,1)}"
+            return
+
+        # 3. if not reached simply continue adding constant for having made above checkpoint n    
+        #self.reward_dict["Checkpoint Level"] = self.checkpoint_reward
         
         ### 5. DISTANCE TO NEXT CHECKPOINT 
-        distance_checkpoint = np.array(self.car.rect.center) - np.array(self.checkpoints[self.checkpoint_counter].rect.center)
-        # normalize by screen width, height, i.e. between 0 and 1 
-        distance_checkpoint = (np.abs(distance_checkpoint) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT]))
-        # subtract from 1
-        distance_checkpoint = (1-np.sum(distance_checkpoint))*DISTANCE_CHECKPOINT_REWARD
-        self.reward_dict["Distance to Checkpoint"] = distance_checkpoint
+        # self.distance_checkpoint = self.car.calc_distance_to_checkpoint(self.checkpoints[self.checkpoint_counter].rect.center)       
+        # # subtract from 1
+        # dist_cp_reward = (1-np.sum(np.abs(self.distance_checkpoint)))*DISTANCE_CHECKPOINT_REWARD
+        # self.reward_dict["Distance to Checkpoint"] = dist_cp_reward
         
         ### sum up all penalties
         self.reward = np.nansum(list(self.reward_dict.copy().values()))
         
         # update stats in screen message
-        self.screenmessage = f"Reward: {round(self.reward,1)} Buffer: {round(self.reward_dict['Wall/Pad Buffer'],1)}"# Wall Distance Penalty: {round(distance_penalty,1)} Checkpoint Distance: {round(distance_checkpoint,1)}"
+        self.screenmessage = f"Reward: {round(self.reward,1)} Buffer: {round(self.reward_dict['Wall/Pad Buffer'],1)}, CP_Counter: {self.checkpoint_counter}, CP Dist: {np.round(self.distance_checkpoint[1],3)}"# Wall Distance Penalty: {round(distance_penalty,1)} Checkpoint Distance: {round(distance_checkpoint,1)}"
 
     def compute_reward_map(self):
         reward_map = np.full((WINDOW_WIDTH, WINDOW_HEIGHT, len(self.reward_dict)+1), np.nan, dtype=np.float32)

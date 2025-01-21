@@ -5,20 +5,22 @@ from rl_game.game_config import VIEW, TURN_ACCELERATION, ACCELERATION, MIN_SPEED
 ########################
 # debug binning
 import numpy as np
-from rl_game.game_config import VIEW
 from rl_game.helpers import get_discrete_state, calc_bins
 
 all_bins = calc_bins()
 
 ########################
+
 environment = RaceEnv()
 environment.init_render()
-run = True
 
+run = True
+steps=0
 while run:
     # smoother controls
     #environment.car.ACCELERATION = 0.5
     #environment.car.TURN_ACCELERATION = 5
+    steps+=1
     # set game speed to 30 fps
     environment.clock.tick(30)
     # ─── CONTROLS ───────────────────────────────────────────────────────────────────
@@ -28,12 +30,15 @@ while run:
     new_state, _,_,_ = environment.step(action)
     ########
     bin_indices = get_discrete_state(new_state, all_bins)
-    print("OBS: ",new_state[-0])#-1:speed, -2:direction, 0:distance top
-    print("BIN: ",bin_indices[-0])
+    #print("OBS: ",new_state[-0])#-1:speed, -2:direction, 0:distance top
+    #print("BIN: ",bin_indices[-0])
     ########
     
     # render current state
     environment.render()
+
+    if environment.win_condition:
+        print(steps)
 
 pygame.quit()
 

@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import pygame
 from rl_game.racegame import RaceEnv
+from rl_game.game_config import MAX_REWARD
 from rl_game.helpers import get_discrete_state, calc_bins
 from rl_game.deepq_learners import DeepQLearner
 import torch
@@ -13,7 +14,7 @@ LOAD = "load" in sys.argv
 SAVE = "save" in sys.argv
 FOLDER_NAME = "deepq_nn"
 
-START_SHOWING_FROM = 50 #400
+START_SHOWING_FROM = 150 #400
 SHOW_EVERY = 1
 
 ### Training settings
@@ -23,10 +24,10 @@ EPISODES = 2000#000 #10000
 START_RANDOM_STARTING_FROM = 0#200#1500
 
 ### Exploration settings
-epsilon = 0.1 # not a constant, qoing to be decayed
+epsilon = 0.4 # not a constant, qoing to be decayed
 EPSILON_MIN = 0 #Noise injection: even when decay is over, leave some exploration to avoid being stuck in local minima
 START_EPSILON_DECAYING = 0#1000
-END_EPSILON_DECAYING = 500
+END_EPSILON_DECAYING = 400
 epsilon_decay_value = (epsilon-EPSILON_MIN)/(END_EPSILON_DECAYING - START_EPSILON_DECAYING)
 # Increase epsilon by delta after n episodes
 EPSILON_PULSE = 0.02
@@ -66,7 +67,7 @@ else:
 
 ### QLEARNING LOOP
 # initialize environment
-environment = RaceEnv()
+environment = RaceEnv(mode="deeqpq_nn")
 environment.init_render()
 render = False
 random_start = False # Only start at random position after n episodes
@@ -94,20 +95,24 @@ for episode in range(EPISODES):
         action = q_agent.act(current_state, epsilon)
         # perform
         new_state, reward, done, checkpoint_reached = environment.step(actions[action])
-
+        # penalize win reward for n steps if too long
+        if environment.win_condition:
+            #clip so that a reward is untouched if >1000 steps but there is always a significant remaining reward
+            penalizer = np.clip((steps/1000)-1, 0, 10)
+            reward -= MAX_REWARD/penalizer
         # render current state
         if render:
             environment.render()
 
-        # Get !s from loacl and target networks, every n runs train them
+        # Get Qs from local and target networks, every n runs train them
         max_future_q, current_q, new_q, td_error = q_agent.step(current_state, action, reward, new_state, done)
 
-        print(f"Tropy reached! Q: {new_q}, R: {reward}") if environment.win_condition else None
+        print(f"Tropy reached! Q: {new_q}, R: {reward}, Steps: {steps}") if environment.win_condition else None
       
         # Update current state for new loop
         current_state = new_state
 
-        # log
+        # logging
         tdes_episode.append(td_error)
         qs_episode.append(new_q)
         rs_episode.append(reward)

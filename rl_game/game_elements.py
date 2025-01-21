@@ -40,6 +40,10 @@ class CarSprite(pygame.sprite.Sprite):
         self.image = pygame.transform.rotate(self.src_image, self.direction)
         self.rect = self.image.get_rect(center=self.rect.center)
 
+    def calc_distance_to_checkpoint(self, rect_checkpoint):
+        distance_checkpoint = (self.rect.center - np.array(rect_checkpoint)) / np.array([WINDOW_WIDTH, WINDOW_HEIGHT])
+        return distance_checkpoint
+    
 class PadSprite(pygame.sprite.Sprite):
     def __init__(self, position, width, height=25):
         super(PadSprite, self).__init__()
